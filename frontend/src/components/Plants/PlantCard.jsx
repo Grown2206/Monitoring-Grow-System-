@@ -1,0 +1,1 @@
+// Einzelne Pflanzen Ansicht

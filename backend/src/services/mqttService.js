@@ -1,0 +1,1 @@
+// (Optional) Falls MQTT statt WebSocket genutzt wird
