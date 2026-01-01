@@ -1,212 +1,190 @@
 /*
- * GROW MONITORING SYSTEM v1.1 - ALL-IN-ONE VERSION
+ * GROW MONITORING SYSTEM v2.4 - FINAL VERSION
  * Für Arduino IDE
+ * Benötigte Bibliotheken:
+ * - PubSubClient (für MQTT)
+ * - ArduinoJson (v7 kompatibel)
+ * - Adafruit SHT31
+ * - BH1750
  */
 
-#include <Arduino.h>
 #include <WiFi.h>
+#include <PubSubClient.h>
 #include <Wire.h>
 #include <Adafruit_SHT31.h>
 #include <BH1750.h>
-#include <Adafruit_MCP4725.h>
-#include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 
 // ==========================================
-// 1. KONFIGURATION (Hier anpassen!)
+// 1. KONFIGURATION
 // ==========================================
-// Bitte hier deine WLAN-Daten eintragen
 const char* WIFI_SSID = "WLAN-915420";
 const char* WIFI_PASSWORD = "78118805138223696181";
 
-// Adresse deines Backend-Servers (IP Adresse des PCs, auf dem Node.js läuft)
-const char* WEBSOCKET_HOST = "192.168.2.100"; 
-const int WEBSOCKET_PORT = 3000;
+const char* MQTT_SERVER = "test.mosquitto.org"; 
+const int MQTT_PORT = 1883;
 
-#define MAX_PLANTS 6
-const int ACTIVE_PLANTS = 6; // Wieviele Sensoren sind angeschlossen?
+// EINZIGARTIGE TOPICS (MÜSSEN MIT BACKEND ÜBEREINSTIMMEN)
+const char* MQTT_TOPIC_DATA = "grow_drexl_v2/data";
+const char* MQTT_TOPIC_CONFIG = "grow_drexl_v2/config";
+const char* MQTT_TOPIC_COMMAND = "grow_drexl_v2/command";
 
-// Pins
-const int PINS_SOIL_MOISTURE[MAX_PLANTS] = { 36, 39, 34, 35, 32, 33 };
+// ==========================================
+// 2. PIN DEFINITIONEN
+// ==========================================
+const int PINS_SOIL_MOISTURE[6] = { 36, 39, 34, 35, 32, 33 };
 #define PIN_TANK_LEVEL 25
 #define PIN_GAS_SENSOR 26
+
 #define PIN_PUMP_1 16
 #define PIN_PUMP_2 17
-#define PIN_RELAY_LIGHT 18
-#define PIN_RELAY_EXHAUST 19
-#define PIN_RELAY_INTAKE 5
-#define PIN_RELAY_HUMID 23
+#define PIN_LIGHT 4 
+#define PIN_FAN 5 
 
-// Intervalle
-const unsigned long INTERVAL_SENSOR = 2000;
-
-// Globale Objekte
-Adafruit_SHT31 sht31;
+// ==========================================
+// 3. OBJEKTE
+// ==========================================
+WiFiClient espClient;
+PubSubClient client(espClient);
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
 BH1750 lightMeter;
-Adafruit_MCP4725 dac;
-WebSocketsClient webSocket;
 
-// Daten Struktur
-struct SensorData {
-    float temp;
-    float humidity;
-    float lux;
-    int soilMoisture[MAX_PLANTS];
-    int tankLevel;
-    int gasLevel;
-};
-
-// Pumpen Status
-struct PumpState {
-    bool isRunning;
-    unsigned long startTime;
-    int duration;
-    int pin;
-};
-PumpState pumps[2];
-
-unsigned long lastSensorRead = 0;
+unsigned long lastMsg = 0;
+#define MSG_INTERVAL 5000 
 
 // ==========================================
-// 2. FUNKTIONEN
+// 4. FUNKTIONEN
 // ==========================================
-
-void setupWiFi() {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.print("Verbinde WLAN");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-    }
-    Serial.println("\n[WIFI] Verbunden!");
+void setup_wifi() {
+  delay(10);
+  Serial.println();
+  Serial.print("Verbinde mit WLAN: ");
+  Serial.println(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWLAN verbunden!");
 }
 
-void activatePump(int pumpId, int durationMs) {
-    int idx = pumpId - 1;
-    if (idx < 0 || idx > 1) return;
-    if (pumps[idx].isRunning) return;
+void callback(char* topic, byte* payload, unsigned int length) {
+  String message;
+  for (int i = 0; i < length; i++) message += (char)payload[i];
+  
+  Serial.print("Nachricht auf ["); Serial.print(topic); Serial.print("]: ");
+  Serial.println(message);
 
-    Serial.printf("[PUMP] Pumpe %d AN fuer %d ms\n", pumpId, durationMs);
-    digitalWrite(pumps[idx].pin, HIGH);
+  // ArduinoJson v7 Syntax
+  JsonDocument doc;
+  DeserializationError error = deserializeJson(doc, message);
+
+  if (!error) {
+    if (String(topic) == MQTT_TOPIC_COMMAND) {
+      const char* action = doc["action"];
+      
+      if (action) {
+        if (strcmp(action, "reboot") == 0) {
+          Serial.println("REBOOT BEFEHL ERHALTEN!");
+          ESP.restart();
+        }
+        else if (strcmp(action, "set_relay") == 0) {
+          const char* relay = doc["relay"];
+          bool state = doc["state"];
+          
+          int pinToSwitch = -1;
+          
+          if (strcmp(relay, "light") == 0) pinToSwitch = PIN_LIGHT;
+          else if (strcmp(relay, "fan_exhaust") == 0) pinToSwitch = PIN_FAN;
+          else if (strcmp(relay, "pump_main") == 0) pinToSwitch = PIN_PUMP_1;
+          else if (strcmp(relay, "pump_mix") == 0) pinToSwitch = PIN_PUMP_2;
+
+          if (pinToSwitch != -1) {
+            digitalWrite(pinToSwitch, state ? HIGH : LOW);
+            Serial.print("Relais geschaltet: ");
+            Serial.print(relay);
+            Serial.print(" -> ");
+            Serial.println(state ? "AN" : "AUS");
+          }
+        }
+      }
+    }
+  }
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    Serial.print("Verbinde mit MQTT (Cloud)...");
+    String clientId = "ESP32-Drexl-" + String(random(0xffff), HEX);
     
-    pumps[idx].isRunning = true;
-    pumps[idx].startTime = millis();
-    pumps[idx].duration = durationMs;
-}
-
-void updatePumps() {
-    unsigned long now = millis();
-    for(int i=0; i<2; i++) {
-        if (pumps[i].isRunning) {
-            if (now - pumps[i].startTime >= pumps[i].duration) {
-                digitalWrite(pumps[i].pin, LOW);
-                pumps[i].isRunning = false;
-                Serial.printf("[PUMP] Pumpe %d AUS\n", i+1);
-            }
-        }
+    if (client.connect(clientId.c_str())) {
+      Serial.println("verbunden!");
+      client.subscribe(MQTT_TOPIC_CONFIG);
+      client.subscribe(MQTT_TOPIC_COMMAND);
+    } else {
+      Serial.print("Fehler, rc="); Serial.print(client.state());
+      Serial.println(" warte 5s...");
+      delay(5000);
     }
-}
-
-void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-    if (type == WStype_CONNECTED) {
-        Serial.println("[WS] Verbunden mit Server!");
-        webSocket.sendTXT("{\"type\":\"auth\", \"device\":\"esp32_main\"}");
-    }
-    else if (type == WStype_TEXT) {
-        StaticJsonDocument<512> doc;
-        deserializeJson(doc, payload);
-        
-        String cmd = doc["command"].as<String>();
-        int id = doc["id"] | 0;
-        bool state = doc["state"];
-
-        Serial.println("Befehl: " + cmd);
-
-        if (cmd == "LIGHT") digitalWrite(PIN_RELAY_LIGHT, state ? HIGH : LOW);
-        else if (cmd == "FAN_EXHAUST") digitalWrite(PIN_RELAY_EXHAUST, state ? HIGH : LOW);
-        else if (cmd == "FAN_INTAKE") digitalWrite(PIN_RELAY_INTAKE, state ? HIGH : LOW);
-        else if (cmd == "PUMP") {
-            if (state) activatePump(id, 5000);
-        }
-    }
+  }
 }
 
 // ==========================================
-// 3. SETUP
+// 5. SETUP & LOOP
 // ==========================================
 void setup() {
-    Serial.begin(115200);
-    Wire.begin(21, 22); // SDA, SCL
+  Serial.begin(115200);
+  
+  for(int i=0; i<6; i++) pinMode(PINS_SOIL_MOISTURE[i], INPUT);
+  pinMode(PIN_TANK_LEVEL, INPUT);
+  pinMode(PIN_GAS_SENSOR, INPUT);
+  
+  pinMode(PIN_PUMP_1, OUTPUT);
+  pinMode(PIN_PUMP_2, OUTPUT);
+  pinMode(PIN_LIGHT, OUTPUT);
+  pinMode(PIN_FAN, OUTPUT);
 
-    // I2C Sensoren Starten
-    if (!sht31.begin(0x44)) Serial.println("SHT31 nicht gefunden");
-    if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) Serial.println("BH1750 Fehler");
-    dac.begin(0x60);
+  if (!sht31.begin(0x44)) Serial.println("SHT31 Fehler");
+  if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) Serial.println("BH1750 Fehler");
 
-    // Pins
-    pinMode(PIN_PUMP_1, OUTPUT);
-    pinMode(PIN_PUMP_2, OUTPUT);
-    pinMode(PIN_RELAY_LIGHT, OUTPUT);
-    pinMode(PIN_RELAY_EXHAUST, OUTPUT);
-    pinMode(PIN_RELAY_INTAKE, OUTPUT);
-    pinMode(PIN_RELAY_HUMID, OUTPUT);
-    
-    // Init Zustand: Alles AUS
-    digitalWrite(PIN_PUMP_1, LOW);
-    digitalWrite(PIN_PUMP_2, LOW);
-    digitalWrite(PIN_RELAY_LIGHT, LOW);
-    
-    // Pumpen Structs
-    pumps[0] = {false, 0, 0, PIN_PUMP_1};
-    pumps[1] = {false, 0, 0, PIN_PUMP_2};
-
-    // Sensoren Input
-    for(int i=0; i<MAX_PLANTS; i++) pinMode(PINS_SOIL_MOISTURE[i], INPUT);
-    pinMode(PIN_TANK_LEVEL, INPUT);
-
-    // Netzwerk
-    setupWiFi();
-    webSocket.begin(WEBSOCKET_HOST, WEBSOCKET_PORT, "/");
-    webSocket.onEvent(webSocketEvent);
-    webSocket.setReconnectInterval(5000);
+  setup_wifi();
+  client.setServer(MQTT_SERVER, MQTT_PORT);
+  client.setCallback(callback);
 }
 
-// ==========================================
-// 4. LOOP
-// ==========================================
 void loop() {
-    webSocket.loop();
-    updatePumps(); // Timer prüfen
+  if (!client.connected()) reconnect();
+  client.loop();
 
-    unsigned long now = millis();
-    if (now - lastSensorRead >= INTERVAL_SENSOR) {
-        lastSensorRead = now;
+  unsigned long now = millis();
+  if (now - lastMsg > MSG_INTERVAL) {
+    lastMsg = now;
 
-        // Daten Sammeln
-        StaticJsonDocument<1024> doc;
-        doc["type"] = "sensor_update";
-        JsonObject d = doc.createNestedObject("data");
+    // ArduinoJson v7 Syntax
+    JsonDocument doc;
+    
+    float t = sht31.readTemperature();
+    float h = sht31.readHumidity();
+    
+    doc["temp"] = isnan(t) ? 0.0 : t;
+    doc["humidity"] = isnan(h) ? 0.0 : h;
+    doc["lux"] = lightMeter.readLightLevel();
+    doc["tank"] = analogRead(PIN_TANK_LEVEL);
+    doc["gas"] = analogRead(PIN_GAS_SENSOR);
 
-        float t = sht31.readTemperature();
-        float h = sht31.readHumidity();
-        d["temp"] = isnan(t) ? 0.0 : t;
-        d["humidity"] = isnan(h) ? 0.0 : h;
-        d["lux"] = lightMeter.readLightLevel();
-        d["tank"] = analogRead(PIN_TANK_LEVEL);
-        d["gas"] = analogRead(PIN_GAS_SENSOR);
-
-        JsonArray soil = d.createNestedArray("soil");
-        for(int i=0; i < ACTIVE_PLANTS; i++) {
-            // Mapping anpassen! 4095=Trocken, 1500=Nass
-            int val = map(analogRead(PINS_SOIL_MOISTURE[i]), 4095, 1200, 0, 100);
-            soil.add(constrain(val, 0, 100));
-        }
-
-        String output;
-        serializeJson(doc, output);
-        webSocket.sendTXT(output);
-        
-        Serial.println("Daten gesendet: " + output);
+    JsonArray soil = doc["soil"].to<JsonArray>();
+    for(int i=0; i<6; i++) {
+      soil.add(analogRead(PINS_SOIL_MOISTURE[i]));
     }
+
+    char buffer[1024];
+    serializeJson(doc, buffer);
+    
+    if(client.publish(MQTT_TOPIC_DATA, buffer)) {
+      Serial.print("Daten gesendet an: ");
+      Serial.println(MQTT_TOPIC_DATA);
+    } else {
+      Serial.println("Fehler beim Senden");
+    }
+  }
 }

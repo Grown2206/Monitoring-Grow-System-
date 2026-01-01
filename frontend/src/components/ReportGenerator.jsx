@@ -1,101 +1,66 @@
 import React from 'react';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { FileDown } from 'lucide-react';
+import { Download, FileText } from 'lucide-react';
 
 export default function ReportGenerator({ historyData, logs, plants }) {
   
-  const generatePDF = () => {
-    const doc = new jsPDF();
-    const today = new Date().toLocaleDateString();
-
-    // 1. Titel & Header
-    doc.setFillColor(16, 185, 129); // Emerald Green
-    doc.rect(0, 0, 210, 20, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(16);
-    doc.text("GrowMonitor - Status Bericht", 14, 13);
-    
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(10);
-    doc.text(`Erstellt am: ${today}`, 14, 30);
-
-    // 2. Pflanzen Übersicht Tabelle
-    doc.setFontSize(12);
-    doc.text("Pflanzen Status", 14, 45);
-    
-    const plantRows = plants.map(p => [
-      `Slot ${p.slotId}`, 
-      p.name, 
-      p.strain || '-', 
-      p.stage, 
-      p.germinatedAt ? new Date(p.germinatedAt).toLocaleDateString() : '-'
-    ]);
-
-    autoTable(doc, {
-      startY: 50,
-      head: [['ID', 'Name', 'Strain', 'Phase', 'Keimung']],
-      body: plantRows,
-      theme: 'grid',
-      headStyles: { fillColor: [16, 185, 129] }
-    });
-
-    // 3. Klima Zusammenfassung (Letzte Messwerte)
-    let finalY = doc.lastAutoTable.finalY + 15;
-    doc.text("Klima & Umwelt (Letzte 24h)", 14, finalY);
-
-    if (historyData.length > 0) {
-      // Statistiken berechnen
-      const temps = historyData.map(d => d.temp);
-      const hums = historyData.map(d => d.humidity);
-      const maxTemp = Math.max(...temps).toFixed(1);
-      const minTemp = Math.min(...temps).toFixed(1);
-      const avgHum = (hums.reduce((a,b)=>a+b,0)/hums.length).toFixed(1);
-
-      const stats = [
-        ['Max Temp', `${maxTemp} °C`],
-        ['Min Temp', `${minTemp} °C`],
-        ['Ø Luftfeuchte', `${avgHum} %`],
-        ['Datensätze', historyData.length]
-      ];
-
-      autoTable(doc, {
-        startY: finalY + 5,
-        body: stats,
-        theme: 'plain',
-      });
-    } else {
-      doc.text("Keine historischen Daten verfügbar.", 14, finalY + 10);
+  const generateCSV = () => {
+    if (!historyData || historyData.length === 0) {
+      alert("Keine Daten zum Exportieren vorhanden.");
+      return;
     }
 
-    // 4. Logs (Letzte 10)
-    finalY = doc.lastAutoTable.finalY + 15;
-    doc.text("System Protokoll (Auszug)", 14, finalY);
+    // 1. CSV Header definieren
+    const headers = [
+      "Datum", "Uhrzeit", "Temperatur (°C)", "Luftfeuchte (%)", "VPD (kPa)", 
+      "Licht (lx)", "Tank (Raw)", "CO2/Gas (Raw)", 
+      "Boden 1", "Boden 2", "Boden 3", "Boden 4", "Boden 5", "Boden 6"
+    ];
 
-    const logRows = logs.slice(0, 15).map(l => [
-      new Date(l.timestamp).toLocaleTimeString(),
-      l.type.toUpperCase(),
-      l.message
-    ]);
-
-    autoTable(doc, {
-      startY: finalY + 5,
-      head: [['Zeit', 'Typ', 'Nachricht']],
-      body: logRows,
-      styles: { fontSize: 8 },
-      columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 20 } }
+    // 2. Datenreihen erstellen
+    const rows = historyData.map(entry => {
+      const date = new Date(entry.timestamp);
+      return [
+        date.toLocaleDateString(),
+        date.toLocaleTimeString(),
+        entry.temp?.toFixed(2) || '',
+        entry.humidity?.toFixed(2) || '',
+        entry.vpd?.toFixed(2) || '',
+        entry.lux || '',
+        entry.tankLevel || '',
+        entry.gasLevel || '',
+        entry.soil1 || '',
+        entry.soil2 || '',
+        entry.soil3 || '',
+        entry.soil4 || '',
+        entry.soil5 || '',
+        entry.soil6 || ''
+      ].join(",");
     });
 
-    // Save
-    doc.save(`GrowReport_${new Date().toISOString().split('T')[0]}.pdf`);
+    // 3. Zusammenfügen
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + rows.join("\n");
+
+    // 4. Download auslösen
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const fileName = `grow_report_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
     <button 
-      onClick={generatePDF}
-      className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded flex items-center gap-2 text-sm transition border border-slate-700"
+      onClick={generateCSV}
+      className="p-2.5 bg-slate-800 text-slate-400 hover:text-white rounded-xl hover:bg-emerald-600 transition-colors flex items-center gap-2 group"
+      title="Daten als CSV exportieren"
     >
-      <FileDown size={16} /> PDF Exportieren
+      <Download size={20} className="group-hover:animate-bounce" />
+      <span className="hidden md:inline text-sm font-medium">Export</span>
     </button>
   );
 }

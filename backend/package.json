@@ -15,7 +15,9 @@
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "mongoose": "^7.5.0",
+    "mqtt": "^5.14.1",
     "node-fetch": "^3.3.2",
+    "socket.io": "^4.8.3",
     "ws": "^8.13.0"
   },
   "devDependencies": {

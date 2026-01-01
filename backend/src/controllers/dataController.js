@@ -1,21 +1,19 @@
 const SensorLog = require('../models/SensorLog');
 
-// Funktion zum Speichern neuer Daten
+// INTERNE Funktion zum Speichern (wird von MQTT/Sensor-Service aufgerufen)
 const saveSensorData = async (dataPayload) => {
   try {
-    // Validierung: Hat das Payload Daten?
     if (!dataPayload) return;
 
-    // Erstelle neuen Datenbank-Eintrag
     const newLog = new SensorLog({
-      device: "esp32_main", // Könnte auch aus payload kommen
+      device: "esp32_main",
       readings: {
         temp: dataPayload.temp,
         humidity: dataPayload.humidity,
         lux: dataPayload.lux,
-        tankLevel: dataPayload.tank, // Achtung: Im ESP JSON heißt es "tank", im Schema "tankLevel"
+        tankLevel: dataPayload.tank,
         gasLevel: dataPayload.gas,
-        soilMoisture: dataPayload.soil // Array
+        soilMoisture: dataPayload.soil
       }
     });
 
@@ -29,9 +27,24 @@ const saveSensorData = async (dataPayload) => {
   }
 };
 
-// Funktion um die letzten 50 Werte für Graphen zu holen (für API)
-const getHistory = async () => {
-  return await SensorLog.find().sort({ timestamp: -1 }).limit(50);
+// API Route: Gibt Daten der letzten 24 Stunden zurück
+const getHistory = async (req, res) => {
+  try {
+    // 1. Berechne den Zeitpunkt vor 24 Stunden (Jetzt - 24h * 60m * 60s * 1000ms)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 2. Finde alle Einträge, deren Timestamp größer (neuer) ist als vor 24h
+    const history = await SensorLog.find({
+      timestamp: { $gte: twentyFourHoursAgo }
+    }).sort({ timestamp: 1 }); // Sortierung: Älteste zuerst (links im Graph) bis Neueste (rechts)
+
+    // Info: Das .limit(50) wurde entfernt, damit wirklich alle Daten des Tages kommen.
+
+    res.json(history);
+  } catch (error) {
+    console.error("Fehler in getHistory:", error);
+    res.status(500).json({ message: "Fehler beim Laden der Historie", error: error.message });
+  }
 };
 
 module.exports = {
