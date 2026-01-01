@@ -8,15 +8,19 @@ const connectDB = require('./config/db'); // 1. DB Konfiguration importieren
 require('./services/mqttService'); // Startet MQTT
 
 // 2. Datenbankverbindung initialisieren
-// Das hat gefehlt! Ohne das wei§ der Server nicht, wo er speichern soll.
-connectDB();
+// Das hat gefehlt! Ohne das weiï¿½ der Server nicht, wo er speichern soll.
+connectDB().then(() => {
+  // Initialisiere Grow-Rezept Templates nach erfolgreicher DB-Verbindung
+  const recipeController = require('./controllers/recipeController');
+  recipeController.initializeTemplates();
+});
 
 const app = express();
 const server = http.createServer(app);
 
-// 1. CORS erlauben (Wichtig fŸr Frontend-Verbindung)
+// 1. CORS erlauben (Wichtig fï¿½r Frontend-Verbindung)
 app.use(cors({
-  origin: "*", // Erlaubt Zugriff von Ÿberall (Handy, PC, etc.)
+  origin: "*", // Erlaubt Zugriff von ï¿½berall (Handy, PC, etc.)
   methods: ["GET", "POST", "PUT", "DELETE"]
 }));
 
@@ -39,7 +43,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// MQTT Daten an das Frontend weiterleiten (BrŸcke)
+// MQTT Daten an das Frontend weiterleiten (Brï¿½cke)
 const { client: mqttClient } = require('./services/mqttService');
 mqttClient.on('message', (topic, message) => {
   if (topic.includes('/data')) {
@@ -58,7 +62,7 @@ app.use('/api', apiRoutes);
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  ?? Server lŠuft!
+  ?? Server lï¿½uft!
   ---------------------------------------
   Lokal:   http://localhost:${PORT}
   Netzwerk: http://<DEINE-PC-IP>:${PORT}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Save, Bell, Wifi, Smartphone, Sliders, Shield, RefreshCw, Power, AlertTriangle, CloudOff } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
+import NotificationSettings from './NotificationSettings';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('automation');
@@ -204,34 +205,44 @@ export default function Settings() {
         {/* --- NOTIFICATIONS TAB --- */}
         {activeTab === 'notifications' && (
            <div className="space-y-6 animate-in fade-in duration-300">
-             <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex gap-3">
-               <Smartphone className="text-amber-500 shrink-0" />
-               <div>
-                 <h4 className="font-bold text-amber-500">Push Benachrichtigungen</h4>
-                 <p className="text-sm text-slate-400">Verbinde dein Handy via Webhook (z.B. Discord, Slack, Telegram) um Alarme zu erhalten.</p>
-               </div>
-             </div>
+             {/* Push-Notifications (PWA) */}
+             <NotificationSettings />
 
-             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <label className="block text-sm text-slate-400 mb-2">Webhook URL</label>
-                <input 
-                  type="text" 
-                  value={webhookUrl}
-                  onChange={(e) => setWebhookUrl(e.target.value)}
-                  placeholder="https://discord.com/api/webhooks/..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none font-mono text-sm focus:border-emerald-500 transition-colors"
-                />
-                <p className="text-xs text-slate-500 mt-2">Wir senden eine POST Anfrage an diese URL bei kritischen Events (Hitze, Wassermangel).</p>
-             </div>
-             
-             <div className="flex justify-end pt-4">
-               <button 
-                 onClick={handleSaveWebhook} 
-                 disabled={loading} 
-                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium shadow-lg shadow-emerald-900/20"
-               >
-                 <Save size={18} /> Webhook Speichern
-               </button>
+             {/* Webhook Integration (Discord, etc.) */}
+             <div className="bg-slate-800 rounded-lg p-6">
+               <div className="flex items-center gap-3 mb-4">
+                 <Smartphone className="text-blue-400" />
+                 <div>
+                   <h3 className="font-semibold text-lg">Webhook Integration</h3>
+                   <p className="text-sm text-slate-400">Verbinde externe Dienste (Discord, Slack, Telegram)</p>
+                 </div>
+               </div>
+
+               <div className="space-y-4">
+                 <div>
+                   <label className="block text-sm text-slate-400 mb-2">Webhook URL</label>
+                   <input
+                     type="text"
+                     value={webhookUrl}
+                     onChange={(e) => setWebhookUrl(e.target.value)}
+                     placeholder="https://discord.com/api/webhooks/..."
+                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white outline-none font-mono text-sm focus:border-emerald-500 transition-colors"
+                   />
+                   <p className="text-xs text-slate-500 mt-2">
+                     POST-Anfragen werden bei kritischen Events gesendet (Temperatur, Gas, Wassermangel)
+                   </p>
+                 </div>
+
+                 <div className="flex justify-end pt-2">
+                   <button
+                     onClick={handleSaveWebhook}
+                     disabled={loading}
+                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium disabled:opacity-50"
+                   >
+                     <Save size={18} /> Webhook Speichern
+                   </button>
+                 </div>
+               </div>
              </div>
            </div>
         )}
