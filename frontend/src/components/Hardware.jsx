@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { 
   Cpu, Wifi, Thermometer, Droplets, Database, Server, RefreshCw, 
-  Settings, CheckCircle2, AlertTriangle, XCircle, Activity 
+  Settings, CheckCircle2, AlertTriangle, XCircle, Activity, Sprout 
 } from 'lucide-react';
 
 const SensorStatus = ({ name, value, status, type }) => (
@@ -11,6 +11,7 @@ const SensorStatus = ({ name, value, status, type }) => (
       <div className={`p-2 rounded-lg ${status === 'ok' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
         {type === 'temp' && <Thermometer size={18} />}
         {type === 'water' && <Droplets size={18} />}
+        {type === 'soil' && <Sprout size={18} />}
         {type === 'system' && <Cpu size={18} />}
       </div>
       <div>
@@ -75,7 +76,7 @@ export default function Hardware() {
         {/* Sensor Liste */}
         <div className="space-y-4">
           <h3 className="text-white font-bold flex items-center gap-2 mb-4">
-            <Activity size={18} className="text-emerald-500" /> Sensoren
+            <Activity size={18} className="text-emerald-500" /> Hauptsensoren
           </h3>
           
           <SensorStatus 
@@ -91,17 +92,40 @@ export default function Hardware() {
             status={sensorData?.lux >= 0 ? 'ok' : 'error'} 
           />
           <SensorStatus 
-            name="Wasserstand (Analog)" 
+            name="Wasserstand (Tank)" 
             type="water" 
             value={`${getVal(sensorData?.tankLevel, 0)} Raw`} 
             status={sensorData?.tankLevel > 0 ? 'ok' : 'error'} 
           />
           <SensorStatus 
-            name="MQ-135 (Gas/CO2)" 
+            name="MQ-135 (CO2/Gas)" 
             type="system" 
             value={`${getVal(sensorData?.gasLevel, 0)} Raw`} 
             status={sensorData?.gasLevel > 0 ? 'ok' : 'error'} 
           />
+
+          {/* NEU: Bodenfeuchtesensoren */}
+          <div className="pt-4 mt-6 border-t border-slate-800">
+            <h3 className="text-white font-bold flex items-center gap-2 mb-4">
+              <Sprout size={18} className="text-emerald-500" /> Bodenfeuchtigkeit (Kapazitiv)
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[0, 1, 2, 3, 4, 5].map((index) => {
+                const val = sensorData?.soil?.[index];
+                // Status OK wenn Wert > 0 und plausibel (ADC max 4095)
+                const isOk = val > 0 && val <= 4095;
+                return (
+                  <SensorStatus 
+                    key={index}
+                    name={`Sensor ${index + 1}`} 
+                    type="soil" 
+                    value={`${getVal(val, 0)} Raw`} 
+                    status={isOk ? 'ok' : 'error'} 
+                  />
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* System Diagnose */}
@@ -140,16 +164,16 @@ export default function Hardware() {
               <Settings size={18} className="text-slate-400" /> Sensor Kalibrierung
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Setzt die aktuellen Rohwerte der Bodensensoren als Referenz.
+              Zum Kalibrieren der Bodenfeuchtesensoren: Sensoren erst komplett trocknen, dann Wert speichern. Danach in Wasser stellen und erneut messen.
             </p>
             
             <div className="flex gap-3">
               <button 
                 onClick={handleCalibrate}
                 disabled={calibrating}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-2 rounded-lg text-sm font-bold border border-slate-700 transition-all flex items-center justify-center gap-2"
+                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 rounded-xl text-sm font-bold border border-slate-700 transition-all flex items-center justify-center gap-2"
               >
-                {calibrating ? <RefreshCw className="animate-spin" size={16}/> : 'Kalibrieren'}
+                {calibrating ? <RefreshCw className="animate-spin" size={16}/> : 'Jetzt Kalibrieren'}
               </button>
             </div>
           </div>

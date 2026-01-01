@@ -2,13 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../services/api';
 
-export default function LiveChart() {
+export default function LiveChart({ accentColor = '#fbbf24' }) { // Standard: Amber
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    // Initial laden
     loadHistory();
-    // Alle 30sek aktualisieren
     const interval = setInterval(loadHistory, 30000);
     return () => clearInterval(interval);
   }, []);
@@ -16,12 +14,11 @@ export default function LiveChart() {
   const loadHistory = async () => {
     try {
       const history = await api.getHistory();
-      // Nur Temp & Humidity für das kleine Dashboard-Chart
       const formatted = history.map(entry => ({
         time: new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         temp: entry.readings?.temp || 0,
         humidity: entry.readings?.humidity || 0
-      })).slice(-20); // Nur die letzten 20 Punkte für "Live" Feeling
+      })).slice(-20); 
       setData(formatted);
     } catch (e) {
       console.error("Chart Error", e);
@@ -35,22 +32,23 @@ export default function LiveChart() {
       <AreaChart data={data}>
         <defs>
           <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="#fbbf24" stopOpacity={0}/>
+            <stop offset="5%" stopColor={accentColor} stopOpacity={0.3}/>
+            <stop offset="95%" stopColor={accentColor} stopOpacity={0}/>
           </linearGradient>
           <linearGradient id="colorHum" x1="0" y1="0" x2="0" y2="1">
             <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
             <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} opacity={0.5} />
         <XAxis dataKey="time" hide />
         <YAxis hide domain={['auto', 'auto']} />
         <Tooltip 
           contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', borderRadius: '8px', fontSize: '12px' }}
           itemStyle={{ color: '#e2e8f0' }}
         />
-        <Area type="monotone" dataKey="temp" stroke="#fbbf24" fillOpacity={1} fill="url(#colorTemp)" strokeWidth={2} />
+        {/* Nutze die AccentColor für Temperatur */}
+        <Area type="monotone" dataKey="temp" stroke={accentColor} fillOpacity={1} fill="url(#colorTemp)" strokeWidth={2} />
         <Area type="monotone" dataKey="humidity" stroke="#3b82f6" fillOpacity={1} fill="url(#colorHum)" strokeWidth={2} />
       </AreaChart>
     </ResponsiveContainer>

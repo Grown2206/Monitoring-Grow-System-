@@ -5,11 +5,22 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 
-export default function PlantCard({ plant, onUpdate }) {
+// NEU: moistureRaw als Prop empfangen
+export default function PlantCard({ plant, onUpdate, moistureRaw }) {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({ ...plant });
 
-  // Hilfsfunktion: Tage berechnen
+  // Hilfsfunktion: Rohwert zu Prozent (gleiche Logik wie in Analytics)
+  const calculateMoisturePct = (raw) => {
+    if (raw === undefined || raw === null) return 0;
+    const min = 1200; // Nass
+    const max = 4095; // Trocken
+    let pct = ((max - raw) / (max - min)) * 100;
+    return Math.max(0, Math.min(100, Math.round(pct)));
+  };
+
+  const moisturePct = calculateMoisturePct(moistureRaw);
+
   const getDaysSince = (date) => {
     if (!date) return 0;
     const diff = new Date() - new Date(date);
@@ -23,14 +34,13 @@ export default function PlantCard({ plant, onUpdate }) {
     try {
       await api.updatePlant(plant.slotId, formData);
       setIsEditing(false);
-      onUpdate(); // Liste neu laden
+      onUpdate(); 
     } catch (e) {
       console.error("Fehler beim Speichern:", e);
       alert("Fehler beim Speichern der Pflanze.");
     }
   };
 
-  // --- BEARBEITUNGS-MODUS ---
   if (isEditing) {
     return (
       <div className="bg-slate-900 border border-emerald-500/50 p-6 rounded-2xl shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
@@ -43,7 +53,6 @@ export default function PlantCard({ plant, onUpdate }) {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Basis Infos */}
           <div className="space-y-3">
             <div>
               <label className="text-xs text-slate-500 uppercase font-bold">Name</label>
@@ -83,7 +92,6 @@ export default function PlantCard({ plant, onUpdate }) {
             </div>
           </div>
 
-          {/* Status & Datum */}
           <div className="space-y-3">
              <div>
               <label className="text-xs text-slate-500 uppercase font-bold">Aktuelle Phase</label>
@@ -158,7 +166,6 @@ export default function PlantCard({ plant, onUpdate }) {
     );
   }
 
-  // --- ANSICHTS-MODUS ---
   const isEmpty = plant.stage === 'Leer';
 
   return (
@@ -169,7 +176,6 @@ export default function PlantCard({ plant, onUpdate }) {
         : 'bg-slate-900 border-slate-800 hover:border-emerald-500/30 shadow-lg hover:shadow-emerald-900/10'}
     `}>
       
-      {/* Edit Button (nur sichtbar bei Hover oder Mobile) */}
       <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
         <button 
           onClick={() => { setFormData({...plant}); setIsEditing(true); }}
@@ -189,7 +195,6 @@ export default function PlantCard({ plant, onUpdate }) {
         </div>
       ) : (
         <div className="p-6">
-          {/* Header */}
           <div className="flex items-start gap-4 mb-6">
             <div className={`
               w-12 h-12 rounded-xl flex items-center justify-center shadow-lg
@@ -206,7 +211,6 @@ export default function PlantCard({ plant, onUpdate }) {
             </div>
           </div>
 
-          {/* Stats Grid */}
           <div className="grid grid-cols-2 gap-3 mb-6">
              <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/50">
                <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
@@ -235,17 +239,19 @@ export default function PlantCard({ plant, onUpdate }) {
                </div>
              </div>
 
-             <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/50">
-               <div className="flex items-center gap-2 text-slate-400 text-xs mb-1">
-                 <Activity size={14} /> Vitalität
+             {/* NEU: Bodenfeuchte Anzeige */}
+             <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/50 relative overflow-hidden">
+               <div className="flex items-center gap-2 text-slate-400 text-xs mb-1 z-10 relative">
+                 <Droplets size={14} className="text-blue-400" /> Boden
                </div>
-               <div className={`font-bold ${plant.health > 80 ? 'text-emerald-400' : 'text-yellow-400'}`}>
-                 {plant.health}%
+               <div className="font-bold text-blue-300 z-10 relative">
+                 {moisturePct}%
                </div>
+               {/* Mini Background Bar */}
+               <div className="absolute bottom-0 left-0 h-1 bg-blue-500/50" style={{width: `${moisturePct}%`}}></div>
              </div>
           </div>
 
-          {/* Progress Bar */}
           <div className="mb-4">
              <div className="flex justify-between text-xs text-slate-500 mb-2">
                <span>Fortschritt (Geschätzt)</span>
@@ -259,7 +265,6 @@ export default function PlantCard({ plant, onUpdate }) {
              </div>
           </div>
 
-          {/* Notes Preview (if any) */}
           {plant.notes && (
             <div className="bg-yellow-500/5 border border-yellow-500/10 p-3 rounded-lg text-xs text-slate-400 italic truncate">
               "{plant.notes}"

@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import PlantCard from './Plants/PlantCard';
-import { Plus, Filter, Sprout, Flower2 } from 'lucide-react';
+import { Plus, Sprout, Flower2, Leaf } from 'lucide-react';
+// NEU: Socket importieren
+import { useSocket } from '../context/SocketContext';
 
 export default function Plants() {
   const [plants, setPlants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, veg, bloom
+  const [filter, setFilter] = useState('all'); 
+  
+  // NEU: Live-Sensordaten holen
+  const { sensorData } = useSocket();
 
   useEffect(() => {
     loadPlants();
@@ -15,7 +20,11 @@ export default function Plants() {
   const loadPlants = async () => {
     try {
       const data = await api.getPlants();
-      setPlants(data);
+      const fullSlots = Array.from({ length: 6 }, (_, i) => {
+        const existing = data.find(p => p.slotId === i + 1);
+        return existing || { slotId: i + 1, stage: 'Leer', name: '', strain: '' };
+      });
+      setPlants(fullSlots);
     } catch (error) {
       console.error("Fehler beim Laden der Pflanzen:", error);
     } finally {
@@ -25,83 +34,81 @@ export default function Plants() {
 
   const filteredPlants = plants.filter(p => {
     if (filter === 'all') return true;
-    // Annahme: p.stage könnte 'Keimling', 'Wachstum', 'Blüte' sein
-    // Dies müsste im Backend Model oder beim Speichern definiert werden
+    if (filter === 'veg') return p.stage === 'Vegetation' || p.stage === 'Keimling';
+    if (filter === 'bloom') return p.stage === 'Blüte';
     return true; 
   });
 
+  const activeCount = plants.filter(p => p.stage !== 'Leer' && p.stage !== 'Geerntet').length;
+  const bloomCount = plants.filter(p => p.stage === 'Blüte').length;
+
   return (
-    <div className="space-y-6">
-      {/* Header Controls */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-slate-900/50 p-4 rounded-2xl border border-slate-800 backdrop-blur-sm">
-        <div>
-          <h2 className="text-xl font-bold text-white">Deine Pflanzen</h2>
-          <p className="text-sm text-slate-400">Verwalte bis zu 6 Slots in deinem System</p>
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      
+      {/* Dashboard Header */}
+      <div className="bg-gradient-to-r from-emerald-900/40 to-slate-900 border border-emerald-500/20 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <h2 className="text-3xl font-bold text-white flex items-center gap-3">
+             <Leaf className="text-emerald-500" /> Grow Management
+          </h2>
+          <p className="text-slate-400 mt-2 max-w-lg">
+            Verwalte deine Ladies. Dokumentiere Wachstum, Blütephase und Zucht-Details für maximalen Ertrag.
+          </p>
         </div>
-        
-        <div className="flex gap-2">
-          <div className="bg-slate-900 rounded-lg p-1 flex border border-slate-800">
-            <button 
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${filter === 'all' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Alle
-            </button>
-            <button 
-              onClick={() => setFilter('veg')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${filter === 'veg' ? 'bg-emerald-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              Wachstum
-            </button>
-          </div>
-          <button className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium transition-all shadow-lg shadow-emerald-900/40">
-            <Plus size={18} /> <span className="hidden sm:inline">Neue Pflanze</span>
-          </button>
+
+        <div className="flex gap-4 relative z-10">
+           <div className="text-center px-4 py-2 bg-slate-950/50 rounded-xl border border-slate-800">
+              <div className="text-2xl font-bold text-white">{activeCount}</div>
+              <div className="text-xs text-slate-500 uppercase">Aktiv</div>
+           </div>
+           <div className="text-center px-4 py-2 bg-slate-950/50 rounded-xl border border-slate-800">
+              <div className="text-2xl font-bold text-purple-400">{bloomCount}</div>
+              <div className="text-xs text-purple-500/70 uppercase">Blüte</div>
+           </div>
         </div>
       </div>
 
-      {/* Cycle Progress Summary (New QoL Feature) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gradient-to-r from-emerald-900/40 to-slate-900 border border-emerald-500/20 p-4 rounded-xl flex items-center gap-4">
-           <div className="p-3 bg-emerald-500/10 rounded-full text-emerald-400">
-             <Sprout size={24} />
-           </div>
-           <div>
-             <div className="text-sm text-slate-400">Durchschn. Veg-Phase</div>
-             <div className="text-lg font-bold text-slate-200">Tag 18 <span className="text-xs font-normal text-slate-500">/ 30</span></div>
-             <div className="w-32 h-1.5 bg-slate-800 rounded-full mt-2 overflow-hidden">
-               <div className="bg-emerald-500 h-full rounded-full" style={{width: '60%'}}></div>
-             </div>
-           </div>
-        </div>
-        <div className="bg-gradient-to-r from-purple-900/40 to-slate-900 border border-purple-500/20 p-4 rounded-xl flex items-center gap-4">
-           <div className="p-3 bg-purple-500/10 rounded-full text-purple-400">
-             <Flower2 size={24} />
-           </div>
-           <div>
-             <div className="text-sm text-slate-400">Ernte Prognose</div>
-             <div className="text-lg font-bold text-slate-200">in 45 Tagen</div>
-             <div className="text-xs text-slate-500">ca. 15. März</div>
-           </div>
-        </div>
+      {/* Filter Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2">
+        <button 
+          onClick={() => setFilter('all')}
+          className={`px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${filter === 'all' ? 'bg-slate-200 text-slate-900' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:border-slate-600'}`}
+        >
+          Alle Pflanzen
+        </button>
+        <button 
+          onClick={() => setFilter('veg')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${filter === 'veg' ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:border-emerald-500/50'}`}
+        >
+          <Sprout size={16}/> Wachstum
+        </button>
+        <button 
+          onClick={() => setFilter('bloom')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap ${filter === 'bloom' ? 'bg-purple-600 text-white' : 'bg-slate-900 text-slate-400 border border-slate-800 hover:border-purple-500/50'}`}
+        >
+          <Flower2 size={16}/> Blüte
+        </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64 text-slate-500 animate-pulse">
-          Lade Pflanzendaten...
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+           {[1,2,3].map(i => (
+             <div key={i} className="h-[350px] bg-slate-900/50 rounded-2xl animate-pulse border border-slate-800"></div>
+           ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredPlants.map((plant) => (
-            <PlantCard key={plant.slotId} plant={plant} onUpdate={loadPlants} />
-          ))}
-          
-          {/* Empty State Cards if less than 6 */}
-          {[...Array(6 - filteredPlants.length)].map((_, i) => (
-             <div key={`empty-${i}`} className="border-2 border-dashed border-slate-800 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-600 min-h-[300px] hover:border-slate-700 hover:bg-slate-800/20 transition-all cursor-pointer group">
-               <Plus className="mb-2 group-hover:scale-110 transition-transform" size={32} />
-               <span className="font-medium">Leerer Slot</span>
-             </div>
+            <PlantCard 
+              key={plant.slotId} 
+              plant={plant} 
+              onUpdate={loadPlants} 
+              // NEU: Live-Wert übergeben (Array Index ist slotId - 1)
+              // sensorData.soil sollte ein Array [val1, val2, ...] sein
+              moistureRaw={sensorData?.soil?.[plant.slotId - 1]} 
+            />
           ))}
         </div>
       )}

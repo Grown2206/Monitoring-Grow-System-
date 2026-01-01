@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import PlantCard from './Plants/PlantCard';
 import { Plus, Sprout, Flower2, Leaf } from 'lucide-react';
+// NEU: Socket importieren
+import { useSocket } from '../context/SocketContext';
 
 export default function Plants() {
   const [plants, setPlants] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all'); // all, veg, bloom
+  const [filter, setFilter] = useState('all'); 
+  
+  // NEU: Live-Sensordaten holen
+  const { sensorData } = useSocket();
 
   useEffect(() => {
     loadPlants();
@@ -15,7 +20,6 @@ export default function Plants() {
   const loadPlants = async () => {
     try {
       const data = await api.getPlants();
-      // Sicherstellen, dass wir 6 Slots haben, auch wenn DB weniger hat
       const fullSlots = Array.from({ length: 6 }, (_, i) => {
         const existing = data.find(p => p.slotId === i + 1);
         return existing || { slotId: i + 1, stage: 'Leer', name: '', strain: '' };
@@ -35,7 +39,6 @@ export default function Plants() {
     return true; 
   });
 
-  // Statistik Berechnung
   const activeCount = plants.filter(p => p.stage !== 'Leer' && p.stage !== 'Geerntet').length;
   const bloomCount = plants.filter(p => p.stage === 'Blüte').length;
 
@@ -44,7 +47,6 @@ export default function Plants() {
       
       {/* Dashboard Header */}
       <div className="bg-gradient-to-r from-emerald-900/40 to-slate-900 border border-emerald-500/20 p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl relative overflow-hidden">
-        {/* Deko Hintergrund */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
 
         <div className="relative z-10">
@@ -99,7 +101,14 @@ export default function Plants() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredPlants.map((plant) => (
-            <PlantCard key={plant.slotId} plant={plant} onUpdate={loadPlants} />
+            <PlantCard 
+              key={plant.slotId} 
+              plant={plant} 
+              onUpdate={loadPlants} 
+              // NEU: Live-Wert übergeben (Array Index ist slotId - 1)
+              // sensorData.soil sollte ein Array [val1, val2, ...] sein
+              moistureRaw={sensorData?.soil?.[plant.slotId - 1]} 
+            />
           ))}
         </div>
       )}
