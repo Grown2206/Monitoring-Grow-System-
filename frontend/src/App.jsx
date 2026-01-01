@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Dashboard from './components/Dashboard';
 import Plants from './components/Plants';
 import Controls from './components/Controls';
@@ -10,9 +11,10 @@ import Hardware from './components/Hardware';
 import AIConsultant from './components/AIConsultant';
 import Settings from './components/Settings';
 import GrowRecipes from './components/GrowRecipes';
+import Login from './components/Auth/Login';
 import {
   LayoutDashboard, Sprout, Settings as SettingsIcon, BarChart3,
-  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen
+  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen, LogOut, Loader
 } from 'lucide-react';
 
 // Erweiterte Status-Badge Komponente
@@ -72,9 +74,28 @@ const TopBar = ({ title, toggleSidebar }) => {
   );
 };
 
-export default function App() {
+// Haupt-App mit Auth-Check
+function AppContent() {
+  const { isAuthenticated, user, logout, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Loading State während Token-Validierung
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Lade Sitzung...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Nicht eingeloggt -> Login-Screen
+  if (!isAuthenticated) {
+    return <Login onSuccess={() => setActiveTab('dashboard')} />;
+  }
 
   const getPageTitle = () => {
     switch(activeTab) {
@@ -103,9 +124,9 @@ export default function App() {
     { id: 'settings', icon: <SettingsIcon size={20} />, label: 'Einstellungen' },
   ];
 
+  // Eingeloggt -> Normale App
   return (
-    <AlertProvider>
-      <SocketProvider>
+    <SocketProvider>
         <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden selection:bg-emerald-500/30">
           
           {/* Mobile Overlay */}
@@ -149,16 +170,23 @@ export default function App() {
               ))}
             </nav>
 
-            <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+            <div className="p-4 border-t border-slate-800 bg-slate-900/50 space-y-2">
               <div className="bg-slate-800/50 rounded-xl p-3 flex items-center gap-3 border border-slate-700/50">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-xs text-white">
-                  GM
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-xs text-white uppercase">
+                  {user?.username?.substring(0, 2) || 'GM'}
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <div className="text-sm font-medium text-slate-200 truncate">Admin User</div>
+                  <div className="text-sm font-medium text-slate-200 truncate">{user?.username || 'User'}</div>
                   <div className="text-xs text-slate-500 truncate">v2.1.0 Stable</div>
                 </div>
               </div>
+              <button
+                onClick={logout}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors text-sm font-medium border border-red-500/20"
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
             </div>
           </aside>
 
@@ -184,7 +212,17 @@ export default function App() {
             </main>
           </div>
         </div>
-      </SocketProvider>
-    </AlertProvider>
+    </SocketProvider>
+  );
+}
+
+// Wrapper mit Providern
+export default function App() {
+  return (
+    <AuthProvider>
+      <AlertProvider>
+        <AppContent />
+      </AlertProvider>
+    </AuthProvider>
   );
 }

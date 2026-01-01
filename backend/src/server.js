@@ -34,14 +34,27 @@ app.use(helmet({
 
 // 2. CORS - Beschränkt auf Frontend-URL
 const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',')
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
   : ['http://localhost:5173', 'http://localhost:3000'];
+
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
 app.use(cors({
   origin: (origin, callback) => {
     // Erlaube Requests ohne Origin (z.B. mobile Apps, Postman)
     if (!origin) return callback(null, true);
 
+    // In Development: Erlaube alle localhost und lokale IPs (192.168.x.x, 10.x.x.x)
+    if (isDevelopment) {
+      const isLocalhost = origin.includes('localhost') || origin.includes('127.0.0.1');
+      const isLocalNetwork = /https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(origin);
+
+      if (isLocalhost || isLocalNetwork || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+    }
+
+    // In Production: Nur explizit erlaubte Origins
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
