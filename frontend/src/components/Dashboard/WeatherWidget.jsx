@@ -20,6 +20,7 @@ export default function WeatherWidget() {
   const [loading, setLoading] = useState(true);
   const [locationName, setLocationName] = useState('Standort wird ermittelt...');
   const [error, setError] = useState(null);
+  const [recommendations, setRecommendations] = useState([]);
 
   useEffect(() => {
     // 1. Standort holen
@@ -32,7 +33,26 @@ export default function WeatherWidget() {
     } else {
       fetchWeather({ coords: { latitude: 52.52, longitude: 13.405 } }, "Berlin (Fallback)");
     }
+
+    // 2. Hole Grow-Empfehlungen vom Backend
+    fetchRecommendations();
+
+    // Aktualisiere Empfehlungen alle 15 Minuten
+    const interval = setInterval(fetchRecommendations, 15 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
+
+  const fetchRecommendations = async () => {
+    try {
+      const res = await fetch('/api/weather/recommendations');
+      const data = await res.json();
+      if (data.success && data.recommendations) {
+        setRecommendations(data.recommendations);
+      }
+    } catch (err) {
+      console.error('Fehler beim Laden der Empfehlungen:', err);
+    }
+  };
 
   const fetchWeather = async (position, fallbackName) => {
     const lat = position.coords.latitude;
@@ -135,6 +155,28 @@ export default function WeatherWidget() {
           );
         })}
       </div>
+
+      {/* Grow-Empfehlungen */}
+      {recommendations.length > 0 && (
+        <div className="mt-4 border-t border-slate-700/50 pt-4 z-10">
+          <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
+            💡 Indoor/Outdoor Tipps
+          </div>
+          {recommendations.slice(0, 2).map((rec, index) => (
+            <div
+              key={index}
+              className={`text-xs p-2 rounded-lg mb-2 ${
+                rec.type === 'warning'
+                  ? 'bg-amber-900/20 border border-amber-500/30 text-amber-200'
+                  : 'bg-emerald-900/20 border border-emerald-500/30 text-emerald-200'
+              }`}
+            >
+              <div className="font-medium">{rec.message}</div>
+              <div className="text-slate-400 mt-0.5">{rec.action}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

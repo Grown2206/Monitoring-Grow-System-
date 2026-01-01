@@ -7,12 +7,16 @@ const { getPlants, updatePlant } = require('../controllers/plantController');
 const { getHistory } = require('../controllers/dataController');
 const { getLogs, getEvents, createEvent, deleteEvent } = require('../controllers/extraController');
 const { getConsultation } = require('../controllers/aiController');
+const notificationController = require('../controllers/notificationController');
+const weatherController = require('../controllers/weatherController');
+const recipeController = require('../controllers/recipeController');
+const analyticsController = require('../controllers/analyticsController');
 
-// MQTT Topics (M†SSEN MIT ARDUINO †BEREINSTIMMEN)
+// MQTT Topics (Mï¿½SSEN MIT ARDUINO ï¿½BEREINSTIMMEN)
 const TOPIC_CONFIG = 'grow_drexl_v2/config';
 const TOPIC_COMMAND = 'grow_drexl_v2/command';
 
-// Config Speicher (Mockup fŸr Laufzeit, wird bei Neustart zurŸckgesetzt - idealerweise DB nutzen)
+// Config Speicher (Mockup fï¿½r Laufzeit, wird bei Neustart zurï¿½ckgesetzt - idealerweise DB nutzen)
 let automationConfig = {
   lightStart: "06:00",
   lightDuration: 18,
@@ -74,7 +78,7 @@ router.get('/settings/webhook', (req, res) => {
 // Webhook speichern
 router.post('/settings/webhook', (req, res) => {
   webhookUrl = req.body.url;
-  // Hier kšnnte man den Notification Service updaten
+  // Hier kï¿½nnte man den Notification Service updaten
   console.log("Webhook URL gespeichert:", webhookUrl);
   res.json({ message: "Webhook gespeichert" });
 });
@@ -117,5 +121,40 @@ router.post('/system/reset', (req, res) => {
   console.log("Factory Reset Befehl gesendet");
   res.json({ message: "Reset initiiert" });
 });
+
+// ==========================================
+// 7. PUSH-NOTIFICATIONS
+// ==========================================
+router.post('/notifications/subscribe', notificationController.subscribe);
+router.post('/notifications/unsubscribe', notificationController.unsubscribe);
+router.post('/notifications/test', notificationController.sendTest);
+router.get('/notifications/public-key', notificationController.getPublicKey);
+router.get('/notifications/stats', notificationController.getStats);
+router.post('/notifications/cleanup', notificationController.cleanup);
+
+// ==========================================
+// 8. WETTER-API
+// ==========================================
+router.get('/weather/current', weatherController.getCurrent);
+router.get('/weather/forecast', weatherController.getForecast);
+router.get('/weather/recommendations', weatherController.getRecommendations);
+
+// ==========================================
+// 9. GROW-REZEPTE & TEMPLATES
+// ==========================================
+router.get('/recipes', recipeController.getAll);
+router.get('/recipes/:id', recipeController.getById);
+router.post('/recipes', recipeController.create);
+router.put('/recipes/:id', recipeController.update);
+router.delete('/recipes/:id', recipeController.delete);
+router.post('/recipes/:id/use', recipeController.use);
+router.post('/recipes/:id/like', recipeController.like);
+
+// ==========================================
+// 10. ANALYTICS & AI
+// ==========================================
+router.get('/analytics/anomalies', analyticsController.getAnomalies);
+router.get('/analytics/predictions', analyticsController.getPredictions);
+router.get('/analytics/optimizations', analyticsController.getOptimizations);
 
 module.exports = router;
