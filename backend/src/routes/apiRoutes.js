@@ -2,7 +2,12 @@ const express = require('express');
 const router = express.Router();
 const mqttService = require('../services/mqttService');
 
+// Middleware Imports
+const { authenticate, optionalAuth } = require('../middleware/auth');
+const { validateBody, validateQuery, validateObjectId, schemas } = require('../middleware/validation');
+
 // Controller Imports
+const authController = require('../controllers/authController');
 const { getPlants, updatePlant } = require('../controllers/plantController');
 const { getHistory } = require('../controllers/dataController');
 const { getLogs, getEvents, createEvent, deleteEvent } = require('../controllers/extraController');
@@ -12,11 +17,11 @@ const weatherController = require('../controllers/weatherController');
 const recipeController = require('../controllers/recipeController');
 const analyticsController = require('../controllers/analyticsController');
 
-// MQTT Topics (M�SSEN MIT ARDUINO �BEREINSTIMMEN)
+// MQTT Topics (MÜSSEN MIT ARDUINO ÜBEREINSTIMMEN)
 const TOPIC_CONFIG = 'grow_drexl_v2/config';
 const TOPIC_COMMAND = 'grow_drexl_v2/command';
 
-// Config Speicher (Mockup f�r Laufzeit, wird bei Neustart zur�ckgesetzt - idealerweise DB nutzen)
+// Config Speicher (Mockup für Laufzeit, wird bei Neustart zurückgesetzt - idealerweise DB nutzen)
 let automationConfig = {
   lightStart: "06:00",
   lightDuration: 18,
@@ -28,133 +33,163 @@ let automationConfig = {
 let webhookUrl = "";
 
 // ==========================================
-// 1. PFLANZEN MANAGEMENT
+// 0. AUTHENTIFIZIERUNG (Public Routes)
 // ==========================================
-router.get('/plants', getPlants);
-router.put('/plants/:slotId', updatePlant);
+router.post('/auth/register', validateBody(schemas.register), authController.register);
+router.post('/auth/login', validateBody(schemas.login), authController.login);
+router.get('/auth/validate', authenticate, authController.validateToken);
+router.post('/auth/refresh', authenticate, authController.refreshToken);
 
 // ==========================================
-// 2. DATEN & HISTORIE
+// 1. PFLANZEN MANAGEMENT (Protected)
 // ==========================================
-router.get('/history', getHistory);
-router.get('/logs', getLogs);
+router.get('/plants', authenticate, getPlants);
+router.put('/plants/:slotId', authenticate, validateBody(schemas.plant), updatePlant);
 
 // ==========================================
-// 3. KALENDER & EVENTS
+// 2. DATEN & HISTORIE (Protected)
 // ==========================================
-router.get('/calendar', getEvents);
-router.post('/calendar', createEvent);
-router.delete('/calendar/:id', deleteEvent);
+router.get('/history', authenticate, validateQuery(schemas.pagination), getHistory);
+router.get('/logs', authenticate, getLogs);
 
 // ==========================================
-// 4. AI CONSULTANT
+// 3. KALENDER & EVENTS (Protected)
 // ==========================================
-router.post('/ai/consult', getConsultation);
+router.get('/calendar', authenticate, getEvents);
+router.post('/calendar', authenticate, createEvent);
+router.delete('/calendar/:id', authenticate, validateObjectId('id'), deleteEvent);
 
 // ==========================================
-// 5. EINSTELLUNGEN (AUTOMATION & WEBHOOK)
+// 4. AI CONSULTANT (Protected)
+// ==========================================
+router.post('/ai/consult', authenticate, getConsultation);
+
+// ==========================================
+// 5. EINSTELLUNGEN (Protected)
 // ==========================================
 // Automation abrufen
-router.get('/settings/automation', (req, res) => {
+router.get('/settings/automation', authenticate, (req, res) => {
   res.json(automationConfig);
 });
 
 // Automation speichern & an ESP senden
-router.post('/settings/automation', (req, res) => {
-  automationConfig = req.body;
-  
-  // Sende Config per MQTT an ESP
-  mqttService.publish(TOPIC_CONFIG, JSON.stringify(automationConfig));
-  
-  console.log("Neue Config an ESP gesendet:", automationConfig);
-  res.json({ message: "Konfiguration aktualisiert", config: automationConfig });
-});
+router.post('/settings/automation',
+  authenticate,
+  validateBody(schemas.automationConfig),
+  (req, res) => {
+    automationConfig = req.body;
+
+    // Sende Config per MQTT an ESP
+    mqttService.publish(TOPIC_CONFIG, JSON.stringify(automationConfig));
+
+    console.log("✅ Neue Config an ESP gesendet:", automationConfig);
+    res.json({
+      success: true,
+      message: "Konfiguration aktualisiert",
+      config: automationConfig
+    });
+  }
+);
 
 // Webhook abrufen
-router.get('/settings/webhook', (req, res) => {
+router.get('/settings/webhook', authenticate, (req, res) => {
   res.json({ url: webhookUrl });
 });
 
 // Webhook speichern
-router.post('/settings/webhook', (req, res) => {
+router.post('/settings/webhook', authenticate, (req, res) => {
   webhookUrl = req.body.url;
-  // Hier k�nnte man den Notification Service updaten
-  console.log("Webhook URL gespeichert:", webhookUrl);
-  res.json({ message: "Webhook gespeichert" });
+  console.log("✅ Webhook URL gespeichert:", webhookUrl);
+  res.json({
+    success: true,
+    message: "Webhook gespeichert"
+  });
 });
 
 // ==========================================
-// 6. STEUERUNG & SYSTEM (RELAIS & RESET)
+// 6. STEUERUNG & SYSTEM (Protected)
 // ==========================================
 // Relais manuell schalten
-router.post('/controls/relay', (req, res) => {
-  const { relay, state } = req.body; // z.B. { relay: "light", state: true }
-  
+router.post('/controls/relay', authenticate, (req, res) => {
+  const { relay, state } = req.body;
+
   if (!relay || state === undefined) {
-    return res.status(400).json({ message: "Fehlende Parameter (relay, state)" });
+    return res.status(400).json({
+      success: false,
+      message: "Fehlende Parameter (relay, state)"
+    });
   }
 
   // MQTT Befehl bauen
-  // Format: { action: "set_relay", relay: "light", state: true }
-  const command = { 
-    action: 'set_relay', 
-    relay: relay, 
-    state: state 
+  const command = {
+    action: 'set_relay',
+    relay: relay,
+    state: state
   };
-  
+
   mqttService.publish(TOPIC_COMMAND, JSON.stringify(command));
-  
-  console.log(`Relais Befehl gesendet: ${relay} -> ${state ? 'AN' : 'AUS'}`);
-  res.json({ message: "Befehl gesendet", command });
+
+  console.log(`⚡ Relais Befehl gesendet: ${relay} -> ${state ? 'AN' : 'AUS'}`);
+  res.json({
+    success: true,
+    message: "Befehl gesendet",
+    command
+  });
 });
 
 // ESP Neustart (Reboot)
-router.post('/system/reboot', (req, res) => {
+router.post('/system/reboot', authenticate, (req, res) => {
   mqttService.publish(TOPIC_COMMAND, JSON.stringify({ action: 'reboot' }));
-  console.log("Reboot Befehl gesendet");
-  res.json({ message: "Reboot initiiert" });
+  console.log("🔄 Reboot Befehl gesendet");
+  res.json({
+    success: true,
+    message: "Reboot initiiert"
+  });
 });
 
 // ESP Factory Reset
-router.post('/system/reset', (req, res) => {
+router.post('/system/reset', authenticate, (req, res) => {
   mqttService.publish(TOPIC_COMMAND, JSON.stringify({ action: 'factory_reset' }));
-  console.log("Factory Reset Befehl gesendet");
-  res.json({ message: "Reset initiiert" });
+  console.log("⚠️ Factory Reset Befehl gesendet");
+  res.json({
+    success: true,
+    message: "Reset initiiert"
+  });
 });
 
 // ==========================================
-// 7. PUSH-NOTIFICATIONS
+// 7. PUSH-NOTIFICATIONS (Protected)
 // ==========================================
-router.post('/notifications/subscribe', notificationController.subscribe);
-router.post('/notifications/unsubscribe', notificationController.unsubscribe);
-router.post('/notifications/test', notificationController.sendTest);
-router.get('/notifications/public-key', notificationController.getPublicKey);
-router.get('/notifications/stats', notificationController.getStats);
-router.post('/notifications/cleanup', notificationController.cleanup);
+router.post('/notifications/subscribe', authenticate, notificationController.subscribe);
+router.post('/notifications/unsubscribe', authenticate, notificationController.unsubscribe);
+router.post('/notifications/test', authenticate, notificationController.sendTest);
+router.get('/notifications/public-key', notificationController.getPublicKey); // Public
+router.get('/notifications/stats', authenticate, notificationController.getStats);
+router.post('/notifications/cleanup', authenticate, notificationController.cleanup);
 
 // ==========================================
-// 8. WETTER-API
+// 8. WETTER-API (Public mit optionalAuth)
 // ==========================================
-router.get('/weather/current', weatherController.getCurrent);
-router.get('/weather/forecast', weatherController.getForecast);
-router.get('/weather/recommendations', weatherController.getRecommendations);
+router.get('/weather/current', optionalAuth, weatherController.getCurrent);
+router.get('/weather/forecast', optionalAuth, weatherController.getForecast);
+router.get('/weather/recommendations', optionalAuth, weatherController.getRecommendations);
 
 // ==========================================
-// 9. GROW-REZEPTE & TEMPLATES
+// 9. GROW-REZEPTE (Mixed - Read Public, Write Protected)
 // ==========================================
-router.get('/recipes', recipeController.getAll);
-router.get('/recipes/:id', recipeController.getById);
-router.post('/recipes', recipeController.create);
-router.put('/recipes/:id', recipeController.update);
-router.delete('/recipes/:id', recipeController.delete);
-router.post('/recipes/:id/use', recipeController.use);
-router.post('/recipes/:id/like', recipeController.like);
+router.get('/recipes', optionalAuth, recipeController.getAll);
+router.get('/recipes/:id', optionalAuth, validateObjectId('id'), recipeController.getById);
+router.post('/recipes', authenticate, validateBody(schemas.recipe), recipeController.create);
+router.put('/recipes/:id', authenticate, validateObjectId('id'), validateBody(schemas.recipe), recipeController.update);
+router.delete('/recipes/:id', authenticate, validateObjectId('id'), recipeController.delete);
+router.post('/recipes/:id/use', authenticate, validateObjectId('id'), recipeController.use);
+router.post('/recipes/:id/like', optionalAuth, validateObjectId('id'), recipeController.like);
 
 // ==========================================
-// 10. ANALYTICS & AI
+// 10. ANALYTICS & AI (Protected)
 // ==========================================
-router.get('/analytics/anomalies', analyticsController.getAnomalies);
-router.get('/analytics/predictions', analyticsController.getPredictions);
-router.get('/analytics/optimizations', analyticsController.getOptimizations);
+router.get('/analytics/anomalies', authenticate, analyticsController.getAnomalies);
+router.get('/analytics/predictions', authenticate, analyticsController.getPredictions);
+router.get('/analytics/optimizations', authenticate, analyticsController.getOptimizations);
 
 module.exports = router;
