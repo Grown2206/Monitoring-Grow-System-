@@ -27,23 +27,57 @@ const saveSensorData = async (dataPayload) => {
   }
 };
 
-// API Route: Gibt Daten der letzten 24 Stunden zurück
-const getHistory = async (req, res) => {
+// API Route: Gibt Sensor-Historie mit Pagination zurück
+const getHistory = async (req, res, next) => {
   try {
-    // 1. Berechne den Zeitpunkt vor 24 Stunden (Jetzt - 24h * 60m * 60s * 1000ms)
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // Query-Parameter (werden bereits durch Joi validiert)
+    const {
+      hours = 24,
+      page = 1,
+      limit = 100,
+      sort = 'timestamp',
+      order = 'asc'
+    } = req.query;
 
-    // 2. Finde alle Einträge, deren Timestamp größer (neuer) ist als vor 24h
-    const history = await SensorLog.find({
-      timestamp: { $gte: twentyFourHoursAgo }
-    }).sort({ timestamp: 1 }); // Sortierung: Älteste zuerst (links im Graph) bis Neueste (rechts)
+    // Zeitraum berechnen
+    const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-    // Info: Das .limit(50) wurde entfernt, damit wirklich alle Daten des Tages kommen.
+    // Pagination berechnen
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    res.json(history);
+    // Sort-Order bestimmen
+    const sortOrder = order === 'desc' ? -1 : 1;
+
+    // Query ausführen
+    const [history, total] = await Promise.all([
+      SensorLog.find({ timestamp: { $gte: hoursAgo } })
+        .sort({ [sort]: sortOrder })
+        .limit(parseInt(limit))
+        .skip(skip)
+        .lean(), // .lean() für bessere Performance (gibt plain JS objects zurück)
+      SensorLog.countDocuments({ timestamp: { $gte: hoursAgo } })
+    ]);
+
+    res.json({
+      success: true,
+      data: history,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit)),
+        hasMore: skip + history.length < total
+      },
+      meta: {
+        hours: parseInt(hours),
+        from: hoursAgo,
+        to: new Date(),
+        count: history.length
+      }
+    });
   } catch (error) {
-    console.error("Fehler in getHistory:", error);
-    res.status(500).json({ message: "Fehler beim Laden der Historie", error: error.message });
+    console.error("❌ Fehler in getHistory:", error);
+    next(error); // Nutze zentrale Error-Handling
   }
 };
 
