@@ -3,16 +3,32 @@ const PushSubscription = require('../models/PushSubscription');
 
 // VAPID Keys - sollten in .env gespeichert werden
 // Generierung: npx web-push generate-vapid-keys
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BNxSvH9gKjPXWJkCqO5uxKGvY8BJPzjdPXQs3Zq4Uz8lQ9vLm_Rj7K2NmXw5T8rP3S6Vh9Yk1Lm4Nq7Rp2Vt5';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'your-private-key-here';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@grow-system.local';
 
-// Web-Push konfigurieren
-webPush.setVapidDetails(
-  VAPID_SUBJECT,
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-);
+// Prüfe ob VAPID Keys konfiguriert sind
+let pushNotificationsEnabled = false;
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    // Web-Push konfigurieren
+    webPush.setVapidDetails(
+      VAPID_SUBJECT,
+      VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY
+    );
+    pushNotificationsEnabled = true;
+    console.log('✅ Push-Notifications Service aktiviert');
+  } catch (error) {
+    console.error('❌ Fehler bei VAPID-Konfiguration:', error.message);
+    console.warn('⚠️  Push-Notifications deaktiviert - Bitte VAPID Keys in .env konfigurieren');
+  }
+} else {
+  console.warn('⚠️  VAPID Keys nicht konfiguriert - Push-Notifications deaktiviert');
+  console.log('💡 Generiere Keys mit: npx web-push generate-vapid-keys');
+  console.log('💡 Füge sie dann zur .env Datei hinzu');
+}
 
 class PushNotificationService {
   /**
@@ -79,6 +95,11 @@ class PushNotificationService {
    * Sendet eine Push-Notification an alle aktiven Subscriptions
    */
   async sendToAll(payload, options = {}) {
+    if (!pushNotificationsEnabled) {
+      console.warn('⚠️  Push-Notifications nicht aktiviert - Überspringe Versand');
+      return { successful: 0, failed: 0, total: 0, disabled: true };
+    }
+
     try {
       const subscriptions = await PushSubscription.find({ active: true });
       console.log(`📤 Sende Push-Notification an ${subscriptions.length} Geräte...`);
@@ -230,7 +251,17 @@ class PushNotificationService {
    * Gibt VAPID Public Key zurück (für Frontend)
    */
   getVapidPublicKey() {
+    if (!pushNotificationsEnabled) {
+      return null;
+    }
     return VAPID_PUBLIC_KEY;
+  }
+
+  /**
+   * Prüft ob Push-Notifications aktiviert sind
+   */
+  isEnabled() {
+    return pushNotificationsEnabled;
   }
 
   /**
