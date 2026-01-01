@@ -9,9 +9,10 @@ import CalendarView from './components/CalendarView';
 import Hardware from './components/Hardware';
 import AIConsultant from './components/AIConsultant';
 import Settings from './components/Settings';
-import { 
-  LayoutDashboard, Sprout, Settings as SettingsIcon, BarChart3, 
-  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf 
+import GrowRecipes from './components/GrowRecipes';
+import {
+  LayoutDashboard, Sprout, Settings as SettingsIcon, BarChart3,
+  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen
 } from 'lucide-react';
 
 // Erweiterte Status-Badge Komponente
@@ -79,6 +80,7 @@ export default function App() {
     switch(activeTab) {
       case 'dashboard': return 'System Übersicht';
       case 'plants': return 'Pflanzen Management';
+      case 'recipes': return 'Grow-Rezepte';
       case 'calendar': return 'Grow Kalender';
       case 'analytics': return 'Daten & Analyse';
       case 'controls': return 'Manuelle Steuerung';
@@ -92,6 +94,7 @@ export default function App() {
   const navItems = [
     { id: 'dashboard', icon: <LayoutDashboard size={20} />, label: 'Übersicht' },
     { id: 'plants', icon: <Sprout size={20} />, label: 'Pflanzen' },
+    { id: 'recipes', icon: <BookOpen size={20} />, label: 'Rezepte' },
     { id: 'calendar', icon: <Calendar size={20} />, label: 'Kalender' },
     { id: 'analytics', icon: <BarChart3 size={20} />, label: 'Historie' },
     { id: 'controls', icon: <Sliders size={20} />, label: 'Steuerung' },
@@ -136,12 +139,12 @@ export default function App() {
 
             <nav className="flex-1 overflow-y-auto p-4 space-y-1">
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-2">Hauptmenü</div>
-              {navItems.slice(0, 5).map(item => (
+              {navItems.slice(0, 6).map(item => (
                 <NavBtn key={item.id} {...item} active={activeTab} set={(id) => {setActiveTab(id); setSidebarOpen(false);}} />
               ))}
-              
+
               <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-6">Tools & System</div>
-              {navItems.slice(5).map(item => (
+              {navItems.slice(6).map(item => (
                 <NavBtn key={item.id} {...item} active={activeTab} set={(id) => {setActiveTab(id); setSidebarOpen(false);}} />
               ))}
             </nav>
@@ -170,6 +173,7 @@ export default function App() {
               <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {activeTab === 'dashboard' && <Dashboard changeTab={setActiveTab} />}
                 {activeTab === 'plants' && <Plants />}
+                {activeTab === 'recipes' && <GrowRecipes />}
                 {activeTab === 'calendar' && <CalendarView />}
                 {activeTab === 'ai' && <AIConsultant />}
                 {activeTab === 'analytics' && <Analytics />}
