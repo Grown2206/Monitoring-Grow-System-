@@ -4,19 +4,29 @@ import {
   ArrowUpRight, ArrowDownRight, Snowflake, CloudLightning
 } from 'lucide-react';
 import { weatherAPI } from '../../utils/api';
+import { colors } from '../../theme';
 
 // Mapping von WMO Wetter-Codes zu Icons und Text
 const getWeatherInfo = (code) => {
-  if (code === 0) return { icon: Sun, label: 'Klar', color: 'text-yellow-400' };
-  if (code >= 1 && code <= 3) return { icon: CloudSun, label: 'Bewölkt', color: 'text-slate-300' };
-  if (code >= 45 && code <= 48) return { icon: Cloud, label: 'Nebel', color: 'text-slate-400' };
-  if (code >= 51 && code <= 67) return { icon: CloudRain, label: 'Regen', color: 'text-blue-400' };
-  if (code >= 71 && code <= 77) return { icon: Snowflake, label: 'Schnee', color: 'text-cyan-200' };
-  if (code >= 95) return { icon: CloudLightning, label: 'Gewitter', color: 'text-purple-400' };
-  return { icon: Cloud, label: 'Unbekannt', color: 'text-slate-400' };
+  if (code === 0) return { icon: Sun, label: 'Klar', color: colors.yellow[400] };
+  if (code >= 1 && code <= 3) return { icon: CloudSun, label: 'Bewölkt', color: colors.slate[300] };
+  if (code >= 45 && code <= 48) return { icon: Cloud, label: 'Nebel', color: colors.slate[400] };
+  if (code >= 51 && code <= 67) return { icon: CloudRain, label: 'Regen', color: colors.blue[400] };
+  if (code >= 71 && code <= 77) return { icon: Snowflake, label: 'Schnee', color: colors.cyan[200] };
+  if (code >= 95) return { icon: CloudLightning, label: 'Gewitter', color: colors.purple[400] };
+  return { icon: Cloud, label: 'Unbekannt', color: colors.slate[400] };
 };
 
-export default function WeatherWidget() {
+export default function WeatherWidget({ theme }) {
+  // Fallback theme für Backwards-Kompatibilität
+  const defaultTheme = {
+    bg: { card: '#0f172a', main: '#020617', hover: '#1e293b' },
+    border: { default: '#1e293b', light: '#334155' },
+    text: { primary: '#f1f5f9', secondary: '#94a3b8', muted: '#64748b' },
+    accent: { color: '#10b981', light: '#34d399', rgb: '16, 185, 129' }
+  };
+  const t = theme || defaultTheme;
+
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const [locationName, setLocationName] = useState('Standort wird ermittelt...');
@@ -86,56 +96,116 @@ export default function WeatherWidget() {
     }
   };
 
-  if (loading) return <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-6 flex items-center justify-center animate-pulse"><Sun className="text-slate-700 animate-spin" /></div>;
-  if (error) return <div className="h-full bg-slate-900 border border-slate-800 rounded-3xl p-6 flex items-center justify-center text-red-400 text-sm">{error}</div>;
+  if (loading) {
+    return (
+      <div
+        className="h-full rounded-3xl p-6 flex items-center justify-center animate-pulse border"
+        style={{ backgroundColor: t.bg.card, borderColor: t.border.default }}
+      >
+        <Sun className="animate-spin" style={{ color: t.border.light }} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        className="h-full rounded-3xl p-6 flex items-center justify-center text-sm border"
+        style={{ backgroundColor: t.bg.card, borderColor: t.border.default, color: colors.red[400] }}
+      >
+        {error}
+      </div>
+    );
+  }
 
   const currentInfo = getWeatherInfo(weather.current.weather_code);
   const CurrentIcon = currentInfo.icon;
 
   return (
-    <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700/50 rounded-3xl p-6 shadow-xl flex flex-col justify-between h-full relative overflow-hidden group">
-      
+    <div
+      className="rounded-3xl p-5 md:p-6 shadow-xl flex flex-col justify-between h-full relative overflow-hidden group border"
+      style={{
+        background: `linear-gradient(to bottom right, ${t.bg.card}, ${t.bg.hover})`,
+        borderColor: `${t.border.default}80`
+      }}
+    >
+
       {/* Hintergrund Effekt */}
-      <div className={`absolute top-0 right-0 w-40 h-40 bg-gradient-to-br from-${currentInfo.color.split('-')[1]}-500/20 to-transparent rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none`}></div>
+      <div
+        className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none opacity-50"
+        style={{ background: `radial-gradient(circle, ${currentInfo.color}20, transparent)` }}
+      ></div>
 
       {/* Header: Ort & Aktuell */}
       <div className="z-10">
         <div className="flex justify-between items-start mb-4">
           <div>
-            <div className="flex items-center gap-1.5 text-slate-400 text-xs uppercase font-bold tracking-wider mb-1">
+            <div
+              className="flex items-center gap-1.5 text-xs uppercase font-bold tracking-wider mb-1"
+              style={{ color: t.text.secondary }}
+            >
               <MapPin size={12} /> {locationName}
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-4xl font-bold text-white">{Math.round(weather.current.temperature_2m)}°</span>
-              <div className="text-sm font-medium text-slate-300">
+              <span className="text-3xl md:text-4xl font-bold" style={{ color: t.text.primary }}>
+                {Math.round(weather.current.temperature_2m)}°
+              </span>
+              <div className="text-sm font-medium" style={{ color: t.text.secondary }}>
                 <div>{currentInfo.label}</div>
-                <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                  <span className="flex items-center gap-1"><Wind size={10}/> {weather.current.wind_speed_10m} km/h</span>
+                <div className="flex items-center gap-2 text-xs mt-0.5" style={{ color: t.text.muted }}>
+                  <span className="flex items-center gap-1">
+                    <Wind size={10}/> {weather.current.wind_speed_10m} km/h
+                  </span>
                 </div>
               </div>
             </div>
           </div>
-          <div className={`p-3 rounded-2xl bg-slate-950/50 border border-slate-700/50 shadow-sm ${currentInfo.color}`}>
+          <div
+            className="p-3 rounded-2xl border shadow-sm"
+            style={{
+              backgroundColor: `${t.bg.main}80`,
+              borderColor: `${t.border.light}80`,
+              color: currentInfo.color
+            }}
+          >
             <CurrentIcon size={32} />
           </div>
         </div>
 
         {/* Zusatzdaten */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 rounded-lg border border-blue-500/20 text-blue-300 text-xs font-medium">
+        <div className="flex gap-3 md:gap-4 mb-6 flex-wrap">
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium"
+            style={{
+              backgroundColor: 'rgba(96, 165, 250, 0.1)',
+              borderColor: 'rgba(96, 165, 250, 0.2)',
+              color: colors.blue[300]
+            }}
+          >
             <Droplets size={14} />
             {weather.current.relative_humidity_2m}% RLF
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-700 text-slate-300 text-xs font-medium">
-            <span className="text-emerald-400 flex items-center"><ArrowUpRight size={12}/> {Math.round(weather.daily.temperature_2m_max[0])}°</span>
-            <span className="w-px h-3 bg-slate-600"></span>
-            <span className="text-blue-400 flex items-center"><ArrowDownRight size={12}/> {Math.round(weather.daily.temperature_2m_min[0])}°</span>
+          <div
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium"
+            style={{
+              backgroundColor: t.bg.hover,
+              borderColor: t.border.light,
+              color: t.text.secondary
+            }}
+          >
+            <span className="flex items-center" style={{ color: colors.emerald[400] }}>
+              <ArrowUpRight size={12}/> {Math.round(weather.daily.temperature_2m_max[0])}°
+            </span>
+            <span className="w-px h-3" style={{ backgroundColor: t.border.default }}></span>
+            <span className="flex items-center" style={{ color: colors.blue[400] }}>
+              <ArrowDownRight size={12}/> {Math.round(weather.daily.temperature_2m_min[0])}°
+            </span>
           </div>
         </div>
       </div>
 
       {/* 3-Tage Forecast */}
-      <div className="grid grid-cols-3 gap-2 border-t border-slate-700/50 pt-4 z-10">
+      <div className="grid grid-cols-3 gap-2 border-t pt-4 z-10" style={{ borderColor: `${t.border.light}80` }}>
         {[1, 2, 3].map((dayIndex) => {
           const date = new Date();
           date.setDate(date.getDate() + dayIndex);
@@ -147,10 +217,18 @@ export default function WeatherWidget() {
           const min = Math.round(weather.daily.temperature_2m_min[dayIndex]);
 
           return (
-            <div key={dayIndex} className="text-center group/day hover:bg-slate-800/50 rounded-xl p-2 transition-colors">
-              <div className="text-xs text-slate-500 font-medium mb-1">{dayName}</div>
-              <DayIcon size={20} className={`mx-auto mb-1 ${info.color}`} />
-              <div className="text-xs font-bold text-slate-200">{max}° <span className="text-slate-500 font-normal">/ {min}°</span></div>
+            <div
+              key={dayIndex}
+              className="text-center hover:bg-opacity-50 rounded-xl p-2 transition-all"
+              style={{ backgroundColor: `${t.bg.hover}00` }}
+            >
+              <div className="text-xs font-medium mb-1" style={{ color: t.text.muted }}>
+                {dayName}
+              </div>
+              <DayIcon size={20} className="mx-auto mb-1" style={{ color: info.color }} />
+              <div className="text-xs font-bold" style={{ color: t.text.secondary }}>
+                {max}° <span className="font-normal" style={{ color: t.text.muted }}>/ {min}°</span>
+              </div>
             </div>
           );
         })}
@@ -158,21 +236,31 @@ export default function WeatherWidget() {
 
       {/* Grow-Empfehlungen */}
       {recommendations.length > 0 && (
-        <div className="mt-4 border-t border-slate-700/50 pt-4 z-10">
-          <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2">
+        <div className="mt-4 border-t pt-4 z-10" style={{ borderColor: `${t.border.light}80` }}>
+          <div
+            className="text-xs font-bold uppercase tracking-wider mb-2"
+            style={{ color: t.text.secondary }}
+          >
             💡 Indoor/Outdoor Tipps
           </div>
           {recommendations.slice(0, 2).map((rec, index) => (
             <div
               key={index}
-              className={`text-xs p-2 rounded-lg mb-2 ${
-                rec.type === 'warning'
-                  ? 'bg-amber-900/20 border border-amber-500/30 text-amber-200'
-                  : 'bg-emerald-900/20 border border-emerald-500/30 text-emerald-200'
-              }`}
+              className="text-xs p-2 rounded-lg mb-2 border"
+              style={{
+                backgroundColor: rec.type === 'warning'
+                  ? 'rgba(245, 158, 11, 0.1)'
+                  : 'rgba(16, 185, 129, 0.1)',
+                borderColor: rec.type === 'warning'
+                  ? 'rgba(245, 158, 11, 0.3)'
+                  : 'rgba(16, 185, 129, 0.3)',
+                color: rec.type === 'warning'
+                  ? colors.amber[200]
+                  : colors.emerald[200]
+              }}
             >
               <div className="font-medium">{rec.message}</div>
-              <div className="text-slate-400 mt-0.5">{rec.action}</div>
+              <div className="mt-0.5" style={{ color: t.text.secondary }}>{rec.action}</div>
             </div>
           ))}
         </div>
