@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Cloud, CloudRain, CloudSun, Sun, Wind, Droplets, MapPin, 
-  ArrowUpRight, ArrowDownRight, Snowflake, CloudLightning 
+import {
+  Cloud, CloudRain, CloudSun, Sun, Wind, Droplets, MapPin,
+  ArrowUpRight, ArrowDownRight, Snowflake, CloudLightning
 } from 'lucide-react';
+import { weatherAPI } from '../../utils/api';
 
 // Mapping von WMO Wetter-Codes zu Icons und Text
 const getWeatherInfo = (code) => {
@@ -44,8 +45,7 @@ export default function WeatherWidget() {
 
   const fetchRecommendations = async () => {
     try {
-      const res = await fetch('/api/weather/recommendations');
-      const data = await res.json();
+      const data = await weatherAPI.getRecommendations();
       if (data.success && data.recommendations) {
         setRecommendations(data.recommendations);
       }
