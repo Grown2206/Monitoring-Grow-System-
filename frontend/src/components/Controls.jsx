@@ -1,386 +1,912 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
-import { 
-  Lock, Unlock, AlertTriangle, Power, Zap, Wind, Droplets, Lightbulb, 
-  Timer, ShieldAlert, Wrench, Leaf, Activity, History, Sun, Moon, Clock 
+import { useTheme, colors } from '../theme';
+import {
+  Lock, Unlock, AlertTriangle, Power, Zap, Wind, Droplets, Lightbulb,
+  Timer, ShieldAlert, Wrench, Leaf, Activity, History, Sun, Moon, Clock,
+  Settings, Play, Pause, RotateCw, TrendingUp, Gauge, Droplet, Fan,
+  Calendar, Sliders, Thermometer, Target, Zap as Lightning, Plus, Minus,
+  Save, BarChart3, Flame, Snowflake, CloudRain, Brain
 } from 'lucide-react';
 import { useAlert } from '../context/AlertContext';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
-// --- Komponente: Activity Log Item ---
-const LogItem = ({ timestamp, message, type }) => (
-  <div className="flex items-start gap-3 py-2 border-b border-slate-800/50 last:border-0 text-sm">
-    <span className="text-slate-500 font-mono text-xs mt-0.5">{timestamp}</span>
-    <span className={`font-medium ${type === 'error' ? 'text-red-400' : 'text-slate-300'}`}>{message}</span>
+// ==================== KOMPONENTEN ====================
+
+// Activity Log Item
+const LogItem = ({ timestamp, message, type, theme }) => (
+  <div className="flex items-start gap-3 py-2 border-b last:border-0 text-sm" style={{ borderColor: `${theme.border.default}50` }}>
+    <span className="font-mono text-xs mt-0.5" style={{ color: theme.text.muted }}>{timestamp}</span>
+    <span className="font-medium" style={{ color: type === 'error' ? colors.red[400] : theme.text.secondary }}>{message}</span>
   </div>
 );
 
-// --- Komponente: Device Card (Erweitert) ---
-const DeviceCard = ({ 
-  id, label, subLabel, isOn, onToggle, disabled, icon: Icon, color, warning, watts 
+// Device Card mit erweiterten Features
+const DeviceCard = ({
+  id, label, subLabel, isOn, onToggle, disabled, icon: Icon, iconColor, iconBg,
+  watts, runtime, health = 100, dimLevel, onDimChange, supportsDim, theme
 }) => {
-  const [runtime, setRuntime] = useState(0);
-
-  // Simulierter Laufzeit-Zähler wenn an
-  useEffect(() => {
-    let interval;
-    if (isOn) {
-      interval = setInterval(() => setRuntime(r => r + 1), 60000); // Update jede Minute
-    } else {
-      setRuntime(0);
-    }
-    return () => clearInterval(interval);
-  }, [isOn]);
-
-  const handleClick = () => {
-    if (!isOn && warning && !disabled) {
-      if (!window.confirm(`${label} wirklich einschalten? Sicherheitsprüfung!`)) return;
-    }
-    onToggle();
-  };
-
-  const activeClass = isOn 
-    ? `bg-slate-800 border-${color ? color.split('-')[1] : 'emerald'}-500/50 shadow-lg` 
-    : 'bg-slate-950 border-slate-800 opacity-90';
+  const activeGlow = isOn && iconColor ? `0 0 20px ${iconColor}40` : 'none';
 
   return (
-    <div className={`
-      relative p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-4 group hover:border-slate-600
-      ${activeClass}
-      ${disabled ? 'opacity-50 cursor-not-allowed grayscale' : ''}
-    `}>
+    <div
+      className="relative p-5 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-4 group"
+      style={{
+        backgroundColor: isOn ? theme.bg.card : theme.bg.main,
+        borderColor: isOn ? iconColor : theme.border.default,
+        boxShadow: activeGlow,
+        opacity: disabled ? 0.5 : 1
+      }}
+    >
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3">
-          <div className={`p-3 rounded-xl transition-colors duration-300 ${isOn ? 'bg-slate-700 text-white' : 'bg-slate-900 text-slate-600'}`}>
-            {Icon ? <Icon size={24} className={isOn ? color : ''} /> : <Power size={24} />}
+          <div
+            className="p-3 rounded-xl transition-all duration-300"
+            style={{
+              backgroundColor: isOn ? `${iconColor}20` : theme.bg.hover,
+              color: isOn ? iconColor : theme.text.muted
+            }}
+          >
+            {Icon ? <Icon size={24} /> : <Power size={24} />}
           </div>
           <div>
-            <h4 className="font-bold text-slate-100">{label}</h4>
-            <p className="text-xs text-slate-500">{subLabel}</p>
+            <h4 className="font-bold" style={{ color: theme.text.primary }}>{label}</h4>
+            <p className="text-xs" style={{ color: theme.text.muted }}>{subLabel}</p>
           </div>
         </div>
-        
+
         {/* Toggle Button */}
         <button
-          onClick={handleClick}
+          onClick={onToggle}
           disabled={disabled}
-          className={`
-            relative w-12 h-7 rounded-full transition-colors duration-300 focus:outline-none 
-            ${isOn ? 'bg-emerald-600' : 'bg-slate-700'}
-            ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}
-          `}
+          className="relative w-12 h-7 rounded-full transition-colors duration-300 focus:outline-none"
+          style={{
+            backgroundColor: isOn ? colors.emerald[600] : theme.bg.hover,
+            cursor: disabled ? 'not-allowed' : 'pointer'
+          }}
         >
-          <span className={`absolute top-1 left-1 bg-white w-5 h-5 rounded-full shadow-sm transition-transform duration-300 ${isOn ? 'translate-x-5' : 'translate-x-0'}`} />
+          <span
+            className="absolute top-1 left-1 w-5 h-5 rounded-full shadow-sm transition-transform duration-300"
+            style={{
+              backgroundColor: '#ffffff',
+              transform: isOn ? 'translateX(20px)' : 'translateX(0)'
+            }}
+          />
         </button>
       </div>
 
+      {/* Dimmer Control */}
+      {supportsDim && isOn && (
+        <div className="pt-3 border-t" style={{ borderColor: `${theme.border.default}50` }}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold" style={{ color: theme.text.secondary }}>Helligkeit</span>
+            <span className="text-xs font-mono" style={{ color: iconColor }}>{dimLevel}%</span>
+          </div>
+          <input
+            type="range"
+            min="10"
+            max="100"
+            value={dimLevel}
+            onChange={(e) => onDimChange && onDimChange(parseInt(e.target.value))}
+            className="w-full h-2 rounded-full appearance-none cursor-pointer"
+            style={{
+              background: `linear-gradient(to right, ${iconColor} 0%, ${iconColor} ${dimLevel}%, ${theme.bg.hover} ${dimLevel}%, ${theme.bg.hover} 100%)`
+            }}
+          />
+        </div>
+      )}
+
       {/* Stats Footer */}
-      <div className="flex items-center justify-between text-xs pt-3 border-t border-slate-700/50 mt-1">
-        <div className="flex items-center gap-1 text-slate-400">
+      <div className="flex items-center justify-between text-xs pt-3 border-t" style={{ borderColor: `${theme.border.default}50` }}>
+        <div className="flex items-center gap-1" style={{ color: theme.text.muted }}>
           <Zap size={12} />
           <span>{isOn ? watts : 0} W</span>
         </div>
-        <div className="flex items-center gap-1 text-slate-400">
+        <div className="flex items-center gap-1" style={{ color: theme.text.muted }}>
           <Clock size={12} />
-          <span>{isOn ? `${runtime} min` : 'Standby'}</span>
+          <span>{isOn && runtime ? `${runtime} min` : 'Standby'}</span>
         </div>
-        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isOn ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
-          {isOn ? 'Aktiv' : 'Aus'}
+        {/* Health Indicator */}
+        <div className="flex items-center gap-1">
+          <div
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: health > 80 ? colors.emerald[500] : health > 50 ? colors.amber[500] : colors.red[500] }}
+          />
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
+            {health}%
+          </span>
         </div>
       </div>
     </div>
   );
 };
 
-// --- Hauptkomponente Controls ---
+// Scene Preset Card
+const SceneCard = ({ icon: Icon, title, description, isActive, onClick, theme, color }) => (
+  <button
+    onClick={onClick}
+    className="p-4 rounded-xl border transition-all text-left group relative overflow-hidden"
+    style={{
+      backgroundColor: isActive ? `${color}10` : theme.bg.card,
+      borderColor: isActive ? color : theme.border.default
+    }}
+  >
+    <div className="relative z-10">
+      <Icon size={24} className="mb-2 transition-transform group-hover:scale-110" style={{ color }} />
+      <div className="font-bold mb-1" style={{ color: theme.text.primary }}>{title}</div>
+      <div className="text-xs" style={{ color: theme.text.muted }}>{description}</div>
+    </div>
+    {isActive && (
+      <div className="absolute top-2 right-2 w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: color }} />
+    )}
+  </button>
+);
+
+// Schedule Entry
+const ScheduleEntry = ({ time, action, enabled, onToggle, theme }) => (
+  <div
+    className="flex items-center justify-between p-3 rounded-lg border"
+    style={{
+      backgroundColor: theme.bg.card,
+      borderColor: theme.border.default
+    }}
+  >
+    <div className="flex items-center gap-3">
+      <Clock size={16} style={{ color: theme.accent.color }} />
+      <div>
+        <div className="font-mono font-bold" style={{ color: theme.text.primary }}>{time}</div>
+        <div className="text-xs" style={{ color: theme.text.muted }}>{action}</div>
+      </div>
+    </div>
+    <button
+      onClick={onToggle}
+      className="w-10 h-6 rounded-full transition-colors"
+      style={{ backgroundColor: enabled ? colors.emerald[600] : theme.bg.hover }}
+    >
+      <span
+        className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1"
+        style={{ transform: enabled ? 'translateX(16px)' : 'translateX(0)' }}
+      />
+    </button>
+  </div>
+);
+
+// Power Monitor Chart
+const PowerChart = ({ data, theme }) => (
+  <div className="h-48">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data}>
+        <defs>
+          <linearGradient id="powerGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor={colors.yellow[400]} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={colors.yellow[400]} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} opacity={0.3} />
+        <XAxis dataKey="time" stroke={theme.text.muted} fontSize={10} hide />
+        <YAxis stroke={theme.text.muted} fontSize={10} width={40} unit="W" />
+        <Tooltip
+          contentStyle={{
+            backgroundColor: theme.bg.card,
+            borderColor: theme.border.default,
+            borderRadius: '8px'
+          }}
+          itemStyle={{ color: theme.text.primary }}
+        />
+        <Area type="monotone" dataKey="watts" stroke={colors.yellow[400]} fill="url(#powerGrad)" strokeWidth={2} />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+// ==================== HAUPT KOMPONENTE ====================
+
 export default function Controls() {
   const { isConnected, socket, sensorData } = useSocket();
   const { showAlert } = useAlert();
+  const { currentTheme } = useTheme();
+  const theme = currentTheme;
+
+  // State
   const [safetyLocked, setSafetyLocked] = useState(true);
   const [logs, setLogs] = useState([]);
-  
-  // State für Relais
-  const [relays, setRelays] = useState({
-    light: false,
-    fan_exhaust: false,
-    fan_circulation: false,
-    pump_main: false,
-    pump_mix: false
+  const [activeScene, setActiveScene] = useState(null);
+  const [showAutomation, setShowAutomation] = useState(false);
+  const [showSchedules, setShowSchedules] = useState(false);
+
+  // Relais State mit erweiterten Infos
+  const [devices, setDevices] = useState({
+    light: { on: false, dimLevel: 100, runtime: 0, health: 100 },
+    fan_exhaust: { on: false, runtime: 0, health: 95 },
+    fan_circulation: { on: false, runtime: 0, health: 100 },
+    pump_main: { on: false, runtime: 0, health: 90 },
+    heater: { on: false, runtime: 0, health: 100 },
+    dehumidifier: { on: false, runtime: 0, health: 85 }
   });
 
-  // Wartungsmodus
+  // Automation Rules
+  const [automation, setAutomation] = useState({
+    tempControl: { enabled: true, target: 24, range: 2 },
+    humidityControl: { enabled: true, target: 60, range: 10 },
+    vpdControl: { enabled: false, target: 1.0, range: 0.2 },
+    autoWatering: { enabled: true, threshold: 30, duration: 5 }
+  });
+
+  // Schedules
+  const [schedules, setSchedules] = useState([
+    { id: 1, time: '06:00', action: 'Licht AN (Sunrise)', enabled: true },
+    { id: 2, time: '08:00', action: 'Bewässerung Start', enabled: true },
+    { id: 3, time: '12:00', action: 'Umluft Boost', enabled: true },
+    { id: 4, time: '18:00', action: 'Licht Dimmen 50%', enabled: false },
+    { id: 5, time: '22:00', action: 'Licht AUS (Sunset)', enabled: true }
+  ]);
+
+  // Power Monitor Data (Mock)
+  const [powerHistory, setPowerHistory] = useState([]);
+
   const [maintenanceMode, setMaintenanceMode] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
 
-  // Zyklus Info (Mockup, müsste aus Settings kommen)
-  const cycleInfo = { start: 6, end: 24, current: new Date().getHours() };
+  // Cycle Info
+  const cycleInfo = { start: 6, end: 22, current: new Date().getHours() };
   const isDay = cycleInfo.current >= cycleInfo.start && cycleInfo.current < cycleInfo.end;
 
   useEffect(() => {
-    // Initial Status
     if (socket) {
       socket.on('relayUpdate', (data) => {
-        setRelays(prev => ({ ...prev, ...data }));
+        // Update device states
       });
     }
-    // Mock Log laden
-    addLog("System verbunden. Warte auf Befehle...");
-    
+    addLog("System verbunden. Automation aktiv.");
+
+    // Power history mock
+    const interval = setInterval(() => {
+      const totalWatts = calculateTotalPower();
+      setPowerHistory(prev => {
+        const newData = [...prev, {
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          watts: totalWatts
+        }];
+        return newData.slice(-20); // Keep last 20 points
+      });
+    }, 10000);
+
     return () => {
       if (socket) socket.off('relayUpdate');
+      clearInterval(interval);
     };
   }, [socket]);
 
-  // Timer
+  // Runtime Timer
   useEffect(() => {
-    let interval;
-    if (maintenanceMode && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    } else if (timeLeft === 0 && maintenanceMode) {
-      endMaintenance();
-    }
+    const interval = setInterval(() => {
+      setDevices(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(key => {
+          if (updated[key].on) {
+            updated[key].runtime += 1;
+          } else {
+            updated[key].runtime = 0;
+          }
+        });
+        return updated;
+      });
+    }, 60000);
     return () => clearInterval(interval);
-  }, [maintenanceMode, timeLeft]);
+  }, []);
+
+  // Automation Engine
+  useEffect(() => {
+    if (!automation.tempControl.enabled && !automation.humidityControl.enabled) return;
+
+    const interval = setInterval(() => {
+      if (!sensorData) return;
+
+      // Temperature Control
+      if (automation.tempControl.enabled) {
+        const { target, range } = automation.tempControl;
+        if (sensorData.temp > target + range && !devices.fan_exhaust.on) {
+          toggleDevice('fan_exhaust');
+          addLog(`Auto: Abluft AN (Temp ${sensorData.temp}°C)`);
+        } else if (sensorData.temp < target - range && devices.fan_exhaust.on) {
+          toggleDevice('fan_exhaust');
+          addLog(`Auto: Abluft AUS (Temp ${sensorData.temp}°C)`);
+        }
+      }
+
+      // Humidity Control
+      if (automation.humidityControl.enabled) {
+        const { target, range } = automation.humidityControl;
+        if (sensorData.humidity > target + range && !devices.dehumidifier.on) {
+          toggleDevice('dehumidifier');
+          addLog(`Auto: Entfeuchter AN (RLF ${sensorData.humidity}%)`);
+        } else if (sensorData.humidity < target - range && devices.dehumidifier.on) {
+          toggleDevice('dehumidifier');
+          addLog(`Auto: Entfeuchter AUS (RLF ${sensorData.humidity}%)`);
+        }
+      }
+    }, 30000); // Check every 30s
+
+    return () => clearInterval(interval);
+  }, [automation, sensorData, devices]);
 
   const addLog = (msg, type = 'info') => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    setLogs(prev => [{ time, msg, type }, ...prev].slice(0, 5));
+    setLogs(prev => [{ time, msg, type }, ...prev].slice(0, 8));
   };
 
-  const toggleRelay = async (key) => {
-    if (safetyLocked) return;
-    const newState = !relays[key];
-    setRelays(prev => ({ ...prev, [key]: newState })); 
-    
-    try {
-      await api.toggleRelay(key, newState);
-      addLog(`${getLabel(key)} ${newState ? 'eingeschaltet' : 'ausgeschaltet'}`);
-      showAlert(`${getLabel(key)} ${newState ? 'eingeschaltet' : 'ausgeschaltet'}`, 'success');
-    } catch (error) {
-      console.error("[Frontend] Fehler beim Schalten:", error);
-      setRelays(prev => ({ ...prev, [key]: !newState })); 
-      addLog(`Fehler beim Schalten von ${getLabel(key)}`, 'error');
-      showAlert("Fehler: Konnte Befehl nicht an Backend senden!", "error");
-    }
+  const toggleDevice = (key) => {
+    if (safetyLocked && !activeScene) return;
+
+    setDevices(prev => ({
+      ...prev,
+      [key]: { ...prev[key], on: !prev[key].on }
+    }));
+
+    const newState = !devices[key].on;
+    api.toggleRelay(key, newState).catch(err => {
+      console.error(err);
+      addLog(`Fehler: ${getLabel(key)}`, 'error');
+    });
+    addLog(`${getLabel(key)} ${newState ? 'EIN' : 'AUS'}`);
   };
 
-  const startMaintenance = (mode, durationMinutes) => {
-    setMaintenanceMode(mode);
-    setTimeLeft(durationMinutes * 60);
-    setSafetyLocked(true);
-    
-    if (mode === 'watering') {
-      api.toggleRelay('fan_circulation', false).catch(e => console.error(e));
-      api.toggleRelay('pump_main', false).catch(e => console.error(e));
-      setRelays(prev => ({ ...prev, fan_circulation: false, pump_main: false }));
-      addLog("Wartung: Gieß-Modus gestartet");
-      showAlert(`Gieß-Modus gestartet (${durationMinutes}min)`, 'success');
-    } else if (mode === 'working') {
-      api.toggleRelay('light', true).catch(e => console.error(e));
-      api.toggleRelay('fan_exhaust', true).catch(e => console.error(e));
-      setRelays(prev => ({ ...prev, light: true, fan_exhaust: true }));
-      addLog("Wartung: Arbeitslicht aktiviert");
-      showAlert(`Arbeitslicht aktiviert (${durationMinutes}min)`, 'success');
-    }
+  const setDimLevel = (level) => {
+    setDevices(prev => ({
+      ...prev,
+      light: { ...prev.light, dimLevel: level }
+    }));
+    addLog(`Licht Helligkeit: ${level}%`);
   };
 
-  const endMaintenance = () => {
-    setMaintenanceMode(null);
-    setTimeLeft(0);
-    addLog("Wartungsmodus beendet");
-    showAlert("Wartungsmodus beendet.", 'info');
+  const activateScene = (scene) => {
+    setActiveScene(scene);
+    setSafetyLocked(false);
+
+    const scenes = {
+      veg: { light: true, fan_exhaust: true, fan_circulation: true, dimLevel: 80 },
+      bloom: { light: true, fan_exhaust: true, fan_circulation: false, dimLevel: 100 },
+      dry: { light: false, fan_exhaust: true, fan_circulation: false, heater: true },
+      maintenance: { light: true, fan_exhaust: true, dimLevel: 50 }
+    };
+
+    const config = scenes[scene];
+    if (!config) return;
+
+    Object.keys(devices).forEach(key => {
+      if (config[key] !== undefined) {
+        setDevices(prev => ({
+          ...prev,
+          [key]: { ...prev[key], on: config[key] }
+        }));
+      }
+    });
+
+    if (config.dimLevel) setDimLevel(config.dimLevel);
+    addLog(`Szene aktiviert: ${scene.toUpperCase()}`, 'info');
+    showAlert(`Szene "${scene}" wurde aktiviert`, 'success');
   };
 
   const emergencyStop = () => {
-    if (confirm("NOT-AUS: Alle Geräte werden sofort abgeschaltet. Fortfahren?")) {
-      const allOff = {
-        light: false, fan_exhaust: false, fan_circulation: false, pump_main: false, pump_mix: false
-      };
-      setRelays(allOff);
-      setMaintenanceMode(null);
-      setSafetyLocked(true);
-      
-      Object.keys(allOff).forEach(key => {
+    if (confirm("NOT-AUS: Alle Geräte werden sofort abgeschaltet!")) {
+      Object.keys(devices).forEach(key => {
+        setDevices(prev => ({
+          ...prev,
+          [key]: { ...prev[key], on: false }
+        }));
         api.toggleRelay(key, false).catch(err => console.error(err));
       });
-
+      setSafetyLocked(true);
+      setActiveScene(null);
       addLog("NOT-AUS AUSGELÖST!", 'error');
       showAlert("NOT-AUS AUSGELÖST!", "error");
     }
   };
 
+  const toggleSchedule = (id) => {
+    setSchedules(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s));
+  };
+
   const getLabel = (key) => {
     const labels = {
-      light: 'Hauptlicht', fan_exhaust: 'Abluft', fan_circulation: 'Umluft', pump_main: 'Bewässerung', pump_mix: 'Mixer'
+      light: 'Hauptlicht',
+      fan_exhaust: 'Abluft',
+      fan_circulation: 'Umluft',
+      pump_main: 'Bewässerung',
+      heater: 'Heizung',
+      dehumidifier: 'Entfeuchter'
     };
     return labels[key] || key;
   };
 
-  const formatTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  const calculateTotalPower = () => {
+    const powerMap = {
+      light: devices.light.on ? (200 * devices.light.dimLevel / 100) : 0,
+      fan_exhaust: devices.fan_exhaust.on ? 35 : 0,
+      fan_circulation: devices.fan_circulation.on ? 15 : 0,
+      pump_main: devices.pump_main.on ? 50 : 0,
+      heater: devices.heater.on ? 150 : 0,
+      dehumidifier: devices.dehumidifier.on ? 250 : 0
+    };
+    return Object.values(powerMap).reduce((a, b) => a + b, 0);
   };
 
-  // Gesamtverbrauch berechnen
-  const totalWatts = 
-    (relays.light ? 200 : 0) + 
-    (relays.fan_exhaust ? 35 : 0) + 
-    (relays.fan_circulation ? 15 : 0) + 
-    (relays.pump_main ? 50 : 0) + 
-    (relays.pump_mix ? 10 : 0);
+  const totalWatts = calculateTotalPower();
+
+  const systemHealth = Object.values(devices).reduce((sum, dev) => sum + dev.health, 0) / Object.keys(devices).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      
-      {/* Top Status Bar: Zyklus & Gesamtverbrauch */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg relative overflow-hidden flex items-center justify-between">
-           <div className="z-10">
-             <div className="flex items-center gap-2 text-slate-400 text-sm mb-1 font-bold uppercase tracking-wider">
-               {isDay ? <Sun size={16} className="text-yellow-400"/> : <Moon size={16} className="text-blue-400"/>}
-               Aktueller Zyklus
-             </div>
-             <div className="text-2xl font-bold text-white">
-               {isDay ? 'Tagphase' : 'Nachtphase'} <span className="text-slate-500 text-lg font-normal">(Stunde {cycleInfo.current})</span>
-             </div>
-             <div className="w-full h-1.5 bg-slate-800 rounded-full mt-3 overflow-hidden">
-                <div className={`h-full rounded-full ${isDay ? 'bg-yellow-400' : 'bg-blue-500'}`} style={{width: `${(cycleInfo.current / 24) * 100}%`}}></div>
-             </div>
-           </div>
-           
-           <div className="hidden md:block z-10 text-right">
-             <div className="text-sm text-slate-400 font-bold uppercase tracking-wider mb-1">Momentanverbrauch</div>
-             <div className="text-3xl font-mono text-emerald-400 font-bold flex items-center justify-end gap-2">
-               <Zap size={24} /> {totalWatts} <span className="text-sm text-slate-500">W</span>
-             </div>
-           </div>
 
-           {/* Deko Background */}
-           <div className={`absolute right-0 top-0 w-32 h-full opacity-10 bg-gradient-to-l ${isDay ? 'from-yellow-500' : 'from-blue-500'} to-transparent pointer-events-none`}></div>
+      {/* Top Status Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        {/* Cycle Status */}
+        <div
+          className="lg:col-span-2 p-6 rounded-2xl border shadow-xl relative overflow-hidden flex items-center justify-between"
+          style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}
+        >
+          <div className="z-10">
+            <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
+              {isDay ? <Sun size={16} style={{ color: colors.yellow[400] }} /> : <Moon size={16} style={{ color: colors.blue[400] }} />}
+              Aktueller Zyklus
+            </div>
+            <div className="text-2xl font-bold" style={{ color: theme.text.primary }}>
+              {isDay ? 'Tagphase' : 'Nachtphase'} <span className="text-lg font-normal" style={{ color: theme.text.muted }}>(Stunde {cycleInfo.current})</span>
+            </div>
+            <div className="w-full h-1.5 rounded-full mt-3 overflow-hidden" style={{ backgroundColor: theme.bg.hover }}>
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${(cycleInfo.current / 24) * 100}%`,
+                  backgroundColor: isDay ? colors.yellow[400] : colors.blue[500]
+                }}
+              />
+            </div>
+          </div>
+          <div
+            className="absolute right-0 top-0 w-32 h-full opacity-10 pointer-events-none"
+            style={{
+              background: `linear-gradient(to left, ${isDay ? colors.yellow[500] : colors.blue[500]}, transparent)`
+            }}
+          />
         </div>
 
-        {/* Safety Lock Status */}
-        <div className={`
-          p-6 rounded-2xl border flex flex-col justify-center items-center text-center transition-all shadow-lg
-          ${safetyLocked 
-            ? 'bg-slate-900 border-slate-800' 
-            : 'bg-red-900/10 border-red-500/30 shadow-red-900/10'}
-        `}>
-          <div className={`p-3 rounded-full mb-3 ${safetyLocked ? 'bg-slate-800 text-emerald-400' : 'bg-red-500 text-white animate-pulse'}`}>
-            {safetyLocked ? <Lock size={24} /> : <Unlock size={24} />}
+        {/* Power Monitor */}
+        <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+          <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
+            <Lightning size={16} style={{ color: colors.yellow[500] }} />
+            Live Power
           </div>
-          <h3 className={`font-bold ${safetyLocked ? 'text-slate-200' : 'text-red-400'}`}>
-            {safetyLocked ? 'Steuerung Gesichert' : 'Manuelle Kontrolle'}
-          </h3>
-          <button 
-            onClick={() => setSafetyLocked(!safetyLocked)}
-            className={`mt-3 px-4 py-2 rounded-lg text-sm font-bold border transition-colors ${safetyLocked ? 'border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800' : 'bg-red-600 text-white border-transparent hover:bg-red-700'}`}
-          >
-            {safetyLocked ? 'Zum Entsperren klicken' : 'Jetzt Sperren'}
-          </button>
+          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: colors.yellow[400] }}>
+            {totalWatts} <span className="text-sm" style={{ color: theme.text.muted }}>W</span>
+          </div>
+          <div className="text-xs mt-1" style={{ color: theme.text.muted }}>
+            {(totalWatts / 1000 * 24 * 0.35).toFixed(2)}€ / Tag
+          </div>
+        </div>
+
+        {/* System Health */}
+        <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+          <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
+            <Activity size={16} style={{ color: colors.emerald[500] }} />
+            System Health
+          </div>
+          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: colors.emerald[400] }}>
+            {systemHealth.toFixed(0)} <span className="text-sm" style={{ color: theme.text.muted }}>%</span>
+          </div>
+          <div className="flex items-center gap-1 mt-1">
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'animate-pulse' : ''}`} style={{ backgroundColor: isConnected ? colors.emerald[500] : colors.red[500] }} />
+            <span className="text-xs" style={{ color: theme.text.muted }}>
+              {isConnected ? 'Online' : 'Offline'}
+            </span>
+          </div>
         </div>
       </div>
 
       {!isConnected && (
-        <div className="bg-red-900/20 border border-red-500/50 p-4 rounded-xl flex items-center gap-3 text-red-200 animate-pulse">
+        <div className="border p-4 rounded-xl flex items-center gap-3 animate-pulse" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: colors.red[200] }}>
           <AlertTriangle />
           <span className="font-bold text-sm">System offline. Befehle werden nicht ausgeführt!</span>
         </div>
       )}
 
-      {/* --- HAUPT STEUERUNG --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        
-        {/* Beleuchtung */}
-        <DeviceCard 
-          id="light" label="Hauptlicht" subLabel="Samsung LM301H" 
-          icon={Lightbulb} color="text-yellow-400" watts={200}
-          isOn={relays.light} onToggle={() => toggleRelay('light')} disabled={safetyLocked}
-        />
-
-        {/* Klima (Abluft) */}
-        <DeviceCard 
-          id="fan_exhaust" label="Abluft" subLabel="Filter System" 
-          icon={Wind} color="text-blue-400" watts={35}
-          isOn={relays.fan_exhaust} onToggle={() => toggleRelay('fan_exhaust')} disabled={safetyLocked}
-        />
-
-        {/* Klima (Umluft) */}
-        <DeviceCard 
-          id="fan_circulation" label="Umluft" subLabel="Ventilator" 
-          icon={Activity} color="text-cyan-400" watts={15}
-          isOn={relays.fan_circulation} onToggle={() => toggleRelay('fan_circulation')} disabled={safetyLocked}
-        />
-
-        {/* Bewässerung */}
-        <DeviceCard 
-          id="pump_main" label="Bewässerung" subLabel="Drip System" 
-          icon={Droplets} color="text-emerald-400" watts={50} warning={true}
-          isOn={relays.pump_main} onToggle={() => toggleRelay('pump_main')} disabled={safetyLocked}
-        />
+      {/* Scene Presets */}
+      <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+            <Target size={20} style={{ color: theme.accent.color }} /> Szenen-Presets
+          </h3>
+          {activeScene && (
+            <button onClick={() => { setActiveScene(null); setSafetyLocked(true); }} className="text-xs px-3 py-1 rounded-lg border" style={{ backgroundColor: theme.bg.hover, borderColor: theme.border.default, color: theme.text.secondary }}>
+              Szene beenden
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <SceneCard icon={Leaf} title="Vegetativ" description="18h Licht, 80% Dim" isActive={activeScene === 'veg'} onClick={() => activateScene('veg')} theme={theme} color={colors.emerald[500]} />
+          <SceneCard icon={Flame} title="Blüte" description="12h Licht, 100% Dim" isActive={activeScene === 'bloom'} onClick={() => activateScene('bloom')} theme={theme} color={colors.purple[500]} />
+          <SceneCard icon={Wind} title="Trocknung" description="Nur Ventilation" isActive={activeScene === 'dry'} onClick={() => activateScene('dry')} theme={theme} color={colors.amber[500]} />
+          <SceneCard icon={Wrench} title="Wartung" description="Arbeitslicht 50%" isActive={activeScene === 'maintenance'} onClick={() => activateScene('maintenance')} theme={theme} color={colors.blue[500]} />
+        </div>
       </div>
 
-      {/* --- UNTERER BEREICH: LOGS & WARTUNG --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Activity Log */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg lg:col-span-1">
-          <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
-            <History size={16} className="text-slate-400" /> Aktivitäten
-          </h3>
-          <div className="space-y-1 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-            {logs.length === 0 && <div className="text-slate-600 text-xs italic">Keine Aktivitäten aufgezeichnet.</div>}
-            {logs.map((log, idx) => (
-              <LogItem key={idx} timestamp={log.time} message={log.msg} type={log.type} />
+      {/* Tabs: Geräte / Automation / Schedules */}
+      <div className="flex gap-2 border-b pb-2" style={{ borderColor: theme.border.default }}>
+        <button onClick={() => { setShowAutomation(false); setShowSchedules(false); }} className={`px-4 py-2 rounded-t-lg font-medium transition-all ${!showAutomation && !showSchedules ? 'border-b-2' : ''}`} style={{ color: !showAutomation && !showSchedules ? theme.accent.color : theme.text.muted, borderColor: theme.accent.color }}>
+          Geräte
+        </button>
+        <button onClick={() => { setShowAutomation(true); setShowSchedules(false); }} className={`px-4 py-2 rounded-t-lg font-medium transition-all ${showAutomation ? 'border-b-2' : ''}`} style={{ color: showAutomation ? theme.accent.color : theme.text.muted, borderColor: theme.accent.color }}>
+          Automation
+        </button>
+        <button onClick={() => { setShowAutomation(false); setShowSchedules(true); }} className={`px-4 py-2 rounded-t-lg font-medium transition-all ${showSchedules ? 'border-b-2' : ''}`} style={{ color: showSchedules ? theme.accent.color : theme.text.muted, borderColor: theme.accent.color }}>
+          Zeitpläne
+        </button>
+      </div>
+
+      {/* Content based on active tab */}
+      {!showAutomation && !showSchedules && (
+        <>
+          {/* Safety Lock */}
+          <div className="flex items-center justify-between p-4 rounded-xl border" style={{ backgroundColor: safetyLocked ? theme.bg.card : 'rgba(239, 68, 68, 0.1)', borderColor: safetyLocked ? theme.border.default : 'rgba(239, 68, 68, 0.3)' }}>
+            <div className="flex items-center gap-3">
+              {safetyLocked ? <Lock size={24} style={{ color: colors.emerald[400] }} /> : <Unlock size={24} className="animate-pulse" style={{ color: colors.red[400] }} />}
+              <div>
+                <h3 className="font-bold" style={{ color: theme.text.primary }}>{safetyLocked ? 'Steuerung Gesichert' : 'Manuelle Kontrolle Aktiv'}</h3>
+                <p className="text-xs" style={{ color: theme.text.muted }}>
+                  {safetyLocked ? 'Entsperren um Geräte manuell zu steuern' : 'Vorsicht! Direkte Gerätesteuerung möglich'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSafetyLocked(!safetyLocked)}
+              className="px-4 py-2 rounded-lg text-sm font-bold border transition-colors"
+              style={{
+                backgroundColor: safetyLocked ? theme.bg.hover : colors.red[600],
+                borderColor: safetyLocked ? theme.border.default : 'transparent',
+                color: safetyLocked ? theme.text.secondary : '#ffffff'
+              }}
+            >
+              {safetyLocked ? 'Entsperren' : 'Sperren'}
+            </button>
+          </div>
+
+          {/* Device Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <DeviceCard
+              id="light"
+              label="Hauptlicht"
+              subLabel="Samsung LM301H LED"
+              icon={Lightbulb}
+              iconColor={colors.yellow[400]}
+              iconBg="rgba(250, 204, 21, 0.1)"
+              watts={200}
+              runtime={devices.light.runtime}
+              health={devices.light.health}
+              isOn={devices.light.on}
+              onToggle={() => toggleDevice('light')}
+              disabled={safetyLocked}
+              supportsDim={true}
+              dimLevel={devices.light.dimLevel}
+              onDimChange={setDimLevel}
+              theme={theme}
+            />
+            <DeviceCard
+              id="fan_exhaust"
+              label="Abluft"
+              subLabel="AC Infinity CloudLine"
+              icon={Fan}
+              iconColor={colors.blue[400]}
+              iconBg="rgba(96, 165, 250, 0.1)"
+              watts={35}
+              runtime={devices.fan_exhaust.runtime}
+              health={devices.fan_exhaust.health}
+              isOn={devices.fan_exhaust.on}
+              onToggle={() => toggleDevice('fan_exhaust')}
+              disabled={safetyLocked}
+              theme={theme}
+            />
+            <DeviceCard
+              id="fan_circulation"
+              label="Umluft"
+              subLabel="Clip-On Ventilator"
+              icon={Wind}
+              iconColor={colors.cyan[400]}
+              iconBg="rgba(34, 211, 238, 0.1)"
+              watts={15}
+              runtime={devices.fan_circulation.runtime}
+              health={devices.fan_circulation.health}
+              isOn={devices.fan_circulation.on}
+              onToggle={() => toggleDevice('fan_circulation')}
+              disabled={safetyLocked}
+              theme={theme}
+            />
+            <DeviceCard
+              id="pump_main"
+              label="Bewässerung"
+              subLabel="Drip Irrigation System"
+              icon={Droplets}
+              iconColor={colors.emerald[400]}
+              iconBg="rgba(16, 185, 129, 0.1)"
+              watts={50}
+              runtime={devices.pump_main.runtime}
+              health={devices.pump_main.health}
+              isOn={devices.pump_main.on}
+              onToggle={() => toggleDevice('pump_main')}
+              disabled={safetyLocked}
+              theme={theme}
+            />
+            <DeviceCard
+              id="heater"
+              label="Heizung"
+              subLabel="Ceramic Heater"
+              icon={Thermometer}
+              iconColor={colors.red[400]}
+              iconBg="rgba(239, 68, 68, 0.1)"
+              watts={150}
+              runtime={devices.heater.runtime}
+              health={devices.heater.health}
+              isOn={devices.heater.on}
+              onToggle={() => toggleDevice('heater')}
+              disabled={safetyLocked}
+              theme={theme}
+            />
+            <DeviceCard
+              id="dehumidifier"
+              label="Entfeuchter"
+              subLabel="Dehumidifier Pro"
+              icon={Droplet}
+              iconColor={colors.orange[400]}
+              iconBg="rgba(251, 146, 60, 0.1)"
+              watts={250}
+              runtime={devices.dehumidifier.runtime}
+              health={devices.dehumidifier.health}
+              isOn={devices.dehumidifier.on}
+              onToggle={() => toggleDevice('dehumidifier')}
+              disabled={safetyLocked}
+              theme={theme}
+            />
+          </div>
+        </>
+      )}
+
+      {showAutomation && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Temperature Control */}
+          <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                <Thermometer size={20} style={{ color: colors.amber[500] }} /> Temperatur-Steuerung
+              </h3>
+              <button
+                onClick={() => setAutomation(prev => ({ ...prev, tempControl: { ...prev.tempControl, enabled: !prev.tempControl.enabled } }))}
+                className="w-10 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: automation.tempControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+              >
+                <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.tempControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Zieltemperatur: {automation.tempControl.target}°C</label>
+                <input
+                  type="range"
+                  min="18"
+                  max="30"
+                  value={automation.tempControl.target}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, tempControl: { ...prev.tempControl, target: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Toleranz: ±{automation.tempControl.range}°C</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="5"
+                  value={automation.tempControl.range}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, tempControl: { ...prev.tempControl, range: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
+                ✓ Abluft schaltet bei {automation.tempControl.target + automation.tempControl.range}°C EIN
+              </div>
+            </div>
+          </div>
+
+          {/* Humidity Control */}
+          <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                <Droplets size={20} style={{ color: colors.blue[500] }} /> Luftfeuchte-Steuerung
+              </h3>
+              <button
+                onClick={() => setAutomation(prev => ({ ...prev, humidityControl: { ...prev.humidityControl, enabled: !prev.humidityControl.enabled } }))}
+                className="w-10 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: automation.humidityControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+              >
+                <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.humidityControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Ziel-RLF: {automation.humidityControl.target}%</label>
+                <input
+                  type="range"
+                  min="40"
+                  max="80"
+                  value={automation.humidityControl.target}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, humidityControl: { ...prev.humidityControl, target: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Toleranz: ±{automation.humidityControl.range}%</label>
+                <input
+                  type="range"
+                  min="5"
+                  max="20"
+                  value={automation.humidityControl.range}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, humidityControl: { ...prev.humidityControl, range: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
+                ✓ Entfeuchter schaltet bei {automation.humidityControl.target + automation.humidityControl.range}% EIN
+              </div>
+            </div>
+          </div>
+
+          {/* VPD Control */}
+          <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                <Brain size={20} style={{ color: colors.purple[500] }} /> VPD-Steuerung (Pro)
+              </h3>
+              <button
+                onClick={() => setAutomation(prev => ({ ...prev, vpdControl: { ...prev.vpdControl, enabled: !prev.vpdControl.enabled } }))}
+                className="w-10 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: automation.vpdControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+              >
+                <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.vpdControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Ziel-VPD: {automation.vpdControl.target} kPa</label>
+                <input
+                  type="range"
+                  min="0.4"
+                  max="1.6"
+                  step="0.1"
+                  value={automation.vpdControl.target}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, vpdControl: { ...prev.vpdControl, target: parseFloat(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)', borderColor: 'rgba(168, 85, 247, 0.2)', color: colors.purple[300] }}>
+                💡 VPD = Vapour Pressure Deficit<br />
+                Optimaler Bereich: 0.8-1.2 kPa (Veg), 1.0-1.4 kPa (Bloom)
+              </div>
+            </div>
+          </div>
+
+          {/* Auto Watering */}
+          <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                <CloudRain size={20} style={{ color: colors.emerald[500] }} /> Auto-Bewässerung
+              </h3>
+              <button
+                onClick={() => setAutomation(prev => ({ ...prev, autoWatering: { ...prev.autoWatering, enabled: !prev.autoWatering.enabled } }))}
+                className="w-10 h-6 rounded-full transition-colors"
+                style={{ backgroundColor: automation.autoWatering.enabled ? colors.emerald[600] : theme.bg.hover }}
+              >
+                <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.autoWatering.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Auslöser: Bodenfeuchtigkeit unter {automation.autoWatering.threshold}%</label>
+                <input
+                  type="range"
+                  min="20"
+                  max="50"
+                  value={automation.autoWatering.threshold}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, autoWatering: { ...prev.autoWatering, threshold: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold mb-2 block" style={{ color: theme.text.muted }}>Dauer: {automation.autoWatering.duration} Minuten</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="15"
+                  value={automation.autoWatering.duration}
+                  onChange={(e) => setAutomation(prev => ({ ...prev, autoWatering: { ...prev.autoWatering, duration: parseInt(e.target.value) } }))}
+                  className="w-full"
+                />
+              </div>
+              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
+                ✓ Bewässerung startet automatisch wenn Sensor unter {automation.autoWatering.threshold}% fällt
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSchedules && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+              <Calendar size={20} style={{ color: theme.accent.color }} /> Zeitgesteuerte Aktionen
+            </h3>
+            <button className="px-4 py-2 rounded-lg border flex items-center gap-2 text-sm font-medium" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, color: theme.text.primary }}>
+              <Plus size={16} /> Neuer Zeitplan
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {schedules.map(schedule => (
+              <ScheduleEntry
+                key={schedule.id}
+                time={schedule.time}
+                action={schedule.action}
+                enabled={schedule.enabled}
+                onToggle={() => toggleSchedule(schedule.id)}
+                theme={theme}
+              />
             ))}
           </div>
         </div>
+      )}
 
-        {/* Wartungs-Panel */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-lg lg:col-span-2">
+      {/* Bottom Section: Power Graph & Logs & Emergency */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Power Monitor Chart */}
+        <div className="lg:col-span-2 p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
           <div className="flex justify-between items-center mb-4">
-             <h3 className="text-white font-bold flex items-center gap-2 text-sm uppercase tracking-wider">
-               <Wrench size={16} className="text-amber-500" /> Wartung & Szenarien
-             </h3>
-             {maintenanceMode && (
-               <div className="flex items-center gap-2 text-amber-500 font-mono font-bold bg-amber-500/10 px-3 py-1 rounded-lg">
-                 <Timer size={14} /> {formatTime(timeLeft)}
-               </div>
-             )}
+            <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+              <BarChart3 size={20} style={{ color: colors.yellow[500] }} /> Power Monitor (Live)
+            </h3>
+            <div className="text-xs px-3 py-1 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
+              Letzte 20 Messungen
+            </div>
           </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <button 
-              onClick={() => startMaintenance('watering', 15)} 
-              disabled={maintenanceMode !== null} 
-              className="bg-slate-950 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl text-left transition-colors group disabled:opacity-50"
-            >
-              <Droplets className="mb-2 text-blue-400 group-hover:scale-110 transition-transform" />
-              <div className="font-bold text-slate-200">Gieß-Modus</div>
-              <div className="text-xs text-slate-500 mt-1">Pumpen AUS (15min)</div>
-            </button>
+          <PowerChart data={powerHistory} theme={theme} />
+        </div>
 
-            <button 
-              onClick={() => startMaintenance('working', 30)} 
-              disabled={maintenanceMode !== null} 
-              className="bg-slate-950 hover:bg-slate-800 border border-slate-700 p-4 rounded-xl text-left transition-colors group disabled:opacity-50"
-            >
-              <Leaf className="mb-2 text-emerald-400 group-hover:scale-110 transition-transform" />
-              <div className="font-bold text-slate-200">Arbeiten</div>
-              <div className="text-xs text-slate-500 mt-1">Licht AN (30min)</div>
-            </button>
-
-            <button 
-              onClick={emergencyStop} 
-              className="bg-red-950/30 hover:bg-red-900/50 border border-red-900/50 p-4 rounded-xl text-left transition-colors group"
-            >
-              <ShieldAlert className="mb-2 text-red-500 group-hover:scale-110 transition-transform" />
-              <div className="font-bold text-red-200">Not-Aus</div>
-              <div className="text-xs text-red-400 mt-1">Alles SOFORT aus</div>
-            </button>
+        {/* Activity Log */}
+        <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+          <h3 className="font-bold mb-4 flex items-center gap-2 text-sm uppercase tracking-wider" style={{ color: theme.text.primary }}>
+            <History size={16} style={{ color: theme.text.muted }} /> Aktivitäten
+          </h3>
+          <div className="space-y-1 max-h-[200px] overflow-y-auto pr-2">
+            {logs.length === 0 && <div className="text-xs italic" style={{ color: theme.text.muted }}>Keine Aktivitäten</div>}
+            {logs.map((log, idx) => (
+              <LogItem key={idx} timestamp={log.time} message={log.msg} type={log.type} theme={theme} />
+            ))}
           </div>
         </div>
+      </div>
+
+      {/* Emergency Stop - Always visible */}
+      <div className="p-6 rounded-2xl border shadow-xl flex items-center justify-between" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+        <div className="flex items-center gap-4">
+          <ShieldAlert size={32} style={{ color: colors.red[500] }} />
+          <div>
+            <h3 className="font-bold" style={{ color: colors.red[200] }}>Notfall-Abschaltung</h3>
+            <p className="text-xs" style={{ color: colors.red[300] }}>Alle Geräte sofort ausschalten (Hardware NOT-AUS)</p>
+          </div>
+        </div>
+        <button
+          onClick={emergencyStop}
+          className="px-6 py-3 rounded-xl font-bold uppercase tracking-wider transition-all hover:scale-105 shadow-lg"
+          style={{ backgroundColor: colors.red[600], color: '#ffffff', boxShadow: `0 10px 20px rgba(239, 68, 68, 0.4)` }}
+        >
+          NOT-AUS
+        </button>
       </div>
     </div>
   );
