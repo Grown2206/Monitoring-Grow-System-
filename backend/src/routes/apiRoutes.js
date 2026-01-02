@@ -41,41 +41,40 @@ router.get('/auth/validate', authenticate, authController.validateToken);
 router.post('/auth/refresh', authenticate, authController.refreshToken);
 
 // ==========================================
-// 1. PFLANZEN MANAGEMENT (Protected)
+// 1. PFLANZEN MANAGEMENT (Public - optional auth)
 // ==========================================
-router.get('/plants', authenticate, getPlants);
-router.put('/plants/:slotId', authenticate, validateBody(schemas.plant), updatePlant);
+router.get('/plants', optionalAuth, getPlants);
+router.put('/plants/:slotId', optionalAuth, updatePlant);
 
 // ==========================================
-// 2. DATEN & HISTORIE (Protected)
+// 2. DATEN & HISTORIE (Public - optional auth)
 // ==========================================
-router.get('/history', authenticate, validateQuery(schemas.pagination), getHistory);
-router.get('/logs', authenticate, getLogs);
+router.get('/history', optionalAuth, getHistory);
+router.get('/logs', optionalAuth, getLogs);
 
 // ==========================================
-// 3. KALENDER & EVENTS (Protected)
+// 3. KALENDER & EVENTS (Public - optional auth)
 // ==========================================
-router.get('/calendar', authenticate, getEvents);
-router.post('/calendar', authenticate, createEvent);
-router.delete('/calendar/:id', authenticate, validateObjectId('id'), deleteEvent);
+router.get('/calendar', optionalAuth, getEvents);
+router.post('/calendar', optionalAuth, createEvent);
+router.delete('/calendar/:id', optionalAuth, validateObjectId('id'), deleteEvent);
 
 // ==========================================
-// 4. AI CONSULTANT (Protected)
+// 4. AI CONSULTANT (Public - optional auth)
 // ==========================================
-router.post('/ai/consult', authenticate, getConsultation);
+router.post('/ai/consult', optionalAuth, getConsultation);
 
 // ==========================================
-// 5. EINSTELLUNGEN (Protected)
+// 5. EINSTELLUNGEN (Public - optional auth)
 // ==========================================
 // Automation abrufen
-router.get('/settings/automation', authenticate, (req, res) => {
+router.get('/settings/automation', optionalAuth, (req, res) => {
   res.json(automationConfig);
 });
 
 // Automation speichern & an ESP senden
 router.post('/settings/automation',
-  authenticate,
-  validateBody(schemas.automationConfig),
+  optionalAuth,
   (req, res) => {
     automationConfig = req.body;
 
@@ -92,12 +91,12 @@ router.post('/settings/automation',
 );
 
 // Webhook abrufen
-router.get('/settings/webhook', authenticate, (req, res) => {
+router.get('/settings/webhook', optionalAuth, (req, res) => {
   res.json({ url: webhookUrl });
 });
 
 // Webhook speichern
-router.post('/settings/webhook', authenticate, (req, res) => {
+router.post('/settings/webhook', optionalAuth, (req, res) => {
   webhookUrl = req.body.url;
   console.log("✅ Webhook URL gespeichert:", webhookUrl);
   res.json({
@@ -107,10 +106,10 @@ router.post('/settings/webhook', authenticate, (req, res) => {
 });
 
 // ==========================================
-// 6. STEUERUNG & SYSTEM (Protected)
+// 6. STEUERUNG & SYSTEM (Public - optional auth)
 // ==========================================
 // Relais manuell schalten
-router.post('/controls/relay', authenticate, (req, res) => {
+router.post('/controls/relay', optionalAuth, (req, res) => {
   const { relay, state } = req.body;
 
   if (!relay || state === undefined) {
@@ -138,7 +137,7 @@ router.post('/controls/relay', authenticate, (req, res) => {
 });
 
 // ESP Neustart (Reboot)
-router.post('/system/reboot', authenticate, (req, res) => {
+router.post('/system/reboot', optionalAuth, (req, res) => {
   mqttService.publish(TOPIC_COMMAND, JSON.stringify({ action: 'reboot' }));
   console.log("🔄 Reboot Befehl gesendet");
   res.json({
@@ -148,7 +147,7 @@ router.post('/system/reboot', authenticate, (req, res) => {
 });
 
 // ESP Factory Reset
-router.post('/system/reset', authenticate, (req, res) => {
+router.post('/system/reset', optionalAuth, (req, res) => {
   mqttService.publish(TOPIC_COMMAND, JSON.stringify({ action: 'factory_reset' }));
   console.log("⚠️ Factory Reset Befehl gesendet");
   res.json({
@@ -158,14 +157,14 @@ router.post('/system/reset', authenticate, (req, res) => {
 });
 
 // ==========================================
-// 7. PUSH-NOTIFICATIONS (Protected)
+// 7. PUSH-NOTIFICATIONS (Public - optional auth)
 // ==========================================
-router.post('/notifications/subscribe', authenticate, notificationController.subscribe);
-router.post('/notifications/unsubscribe', authenticate, notificationController.unsubscribe);
-router.post('/notifications/test', authenticate, notificationController.sendTest);
+router.post('/notifications/subscribe', optionalAuth, notificationController.subscribe);
+router.post('/notifications/unsubscribe', optionalAuth, notificationController.unsubscribe);
+router.post('/notifications/test', optionalAuth, notificationController.sendTest);
 router.get('/notifications/public-key', notificationController.getPublicKey); // Public
-router.get('/notifications/stats', authenticate, notificationController.getStats);
-router.post('/notifications/cleanup', authenticate, notificationController.cleanup);
+router.get('/notifications/stats', optionalAuth, notificationController.getStats);
+router.post('/notifications/cleanup', optionalAuth, notificationController.cleanup);
 
 // ==========================================
 // 8. WETTER-API (Public mit optionalAuth)
@@ -175,21 +174,21 @@ router.get('/weather/forecast', optionalAuth, weatherController.getForecast);
 router.get('/weather/recommendations', optionalAuth, weatherController.getRecommendations);
 
 // ==========================================
-// 9. GROW-REZEPTE (Mixed - Read Public, Write Protected)
+// 9. GROW-REZEPTE (Public - optional auth)
 // ==========================================
 router.get('/recipes', optionalAuth, recipeController.getAll);
 router.get('/recipes/:id', optionalAuth, validateObjectId('id'), recipeController.getById);
-router.post('/recipes', authenticate, validateBody(schemas.recipe), recipeController.create);
-router.put('/recipes/:id', authenticate, validateObjectId('id'), validateBody(schemas.recipe), recipeController.update);
-router.delete('/recipes/:id', authenticate, validateObjectId('id'), recipeController.delete);
-router.post('/recipes/:id/use', authenticate, validateObjectId('id'), recipeController.use);
+router.post('/recipes', optionalAuth, recipeController.create);
+router.put('/recipes/:id', optionalAuth, validateObjectId('id'), recipeController.update);
+router.delete('/recipes/:id', optionalAuth, validateObjectId('id'), recipeController.delete);
+router.post('/recipes/:id/use', optionalAuth, validateObjectId('id'), recipeController.use);
 router.post('/recipes/:id/like', optionalAuth, validateObjectId('id'), recipeController.like);
 
 // ==========================================
-// 10. ANALYTICS & AI (Protected)
+// 10. ANALYTICS & AI (Public - optional auth)
 // ==========================================
-router.get('/analytics/anomalies', authenticate, analyticsController.getAnomalies);
-router.get('/analytics/predictions', authenticate, analyticsController.getPredictions);
-router.get('/analytics/optimizations', authenticate, analyticsController.getOptimizations);
+router.get('/analytics/anomalies', optionalAuth, analyticsController.getAnomalies);
+router.get('/analytics/predictions', optionalAuth, analyticsController.getPredictions);
+router.get('/analytics/optimizations', optionalAuth, analyticsController.getOptimizations);
 
 module.exports = router;
