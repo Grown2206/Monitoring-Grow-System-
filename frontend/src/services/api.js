@@ -10,7 +10,8 @@ import {
   calendarAPI,
   aiAPI,
   settingsAPI,
-  controlsAPI
+  controlsAPI,
+  nutrientsAPI
 } from '../utils/api';
 
 // Alte API-Methoden (für Backwards-Compatibility)
@@ -45,4 +46,15 @@ export const api = {
 
   // Relais schalten
   toggleRelay: (relayKey, state) => controlsAPI.setRelay(relayKey, state),
+
+  // Nährstoffe
+  getNutrientSchedules: () => nutrientsAPI.getSchedules(),
+  createNutrientSchedule: (data) => nutrientsAPI.createSchedule(data),
+  manualDose: (waterVolume, mlPerLiter, notes) => nutrientsAPI.manualDose(waterVolume, mlPerLiter, notes),
+  getNutrientReservoir: () => nutrientsAPI.getReservoir(),
+  getNutrientLogs: (params) => nutrientsAPI.getLogs(params),
+  getNutrientStats: (startDate, endDate) => nutrientsAPI.getStats(startDate, endDate),
 };
+
+// Default export für neue Komponenten (VPD, Sensors, Timelapse)
+export default newApi;

@@ -13,9 +13,14 @@ import AIConsultant from './components/AIConsultant';
 import Settings from './components/Settings';
 import GrowRecipes from './components/GrowRecipes';
 import Login from './components/Auth/Login';
+import NutrientDashboard from './components/Nutrients/NutrientDashboard';
+import VPDDashboard from './components/VPD/VPDDashboard';
+import SensorDashboard from './components/Sensors/SensorDashboard';
+import TimelapseDashboard from './components/Timelapse/TimelapseDashboard';
 import {
   LayoutDashboard, Sprout, Settings as SettingsIcon, BarChart3,
-  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen, LogOut, Loader
+  Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen, LogOut, Loader,
+  Beaker, Droplet, Zap, Film
 } from 'lucide-react';
 
 // Erweiterte Status-Badge Komponente
@@ -107,6 +112,10 @@ function AppContent() {
       case 'calendar': return 'Grow Kalender';
       case 'analytics': return 'Daten & Analyse';
       case 'controls': return 'Manuelle Steuerung';
+      case 'nutrients': return 'Nährstoff-Management';
+      case 'sensors': return 'EC/pH Sensoren';
+      case 'vpd': return 'VPD Control';
+      case 'timelapse': return 'Timelapse Generator';
       case 'settings': return 'Einstellungen';
       case 'hardware': return 'System Status';
       case 'ai': return 'AI Consultant';
@@ -121,6 +130,10 @@ function AppContent() {
     { id: 'calendar', icon: <Calendar size={20} />, label: 'Kalender' },
     { id: 'analytics', icon: <BarChart3 size={20} />, label: 'Historie' },
     { id: 'controls', icon: <Sliders size={20} />, label: 'Steuerung' },
+    { id: 'nutrients', icon: <Beaker size={20} />, label: 'Nährstoffe' },
+    { id: 'sensors', icon: <Zap size={20} />, label: 'EC/pH' },
+    { id: 'vpd', icon: <Droplet size={20} />, label: 'VPD' },
+    { id: 'timelapse', icon: <Film size={20} />, label: 'Timelapse' },
     { id: 'ai', icon: <Bot size={20} />, label: 'AI Consultant' },
     { id: 'hardware', icon: <Cpu size={20} />, label: 'System' },
     { id: 'settings', icon: <SettingsIcon size={20} />, label: 'Einstellungen' },
@@ -209,6 +222,10 @@ function AppContent() {
                 {activeTab === 'analytics' && <Analytics />}
                 {activeTab === 'hardware' && <Hardware />}
                 {activeTab === 'controls' && <Controls />}
+                {activeTab === 'nutrients' && <NutrientDashboard />}
+                {activeTab === 'sensors' && <SensorDashboard />}
+                {activeTab === 'vpd' && <VPDDashboard />}
+                {activeTab === 'timelapse' && <TimelapseDashboard />}
                 {activeTab === 'settings' && <Settings />}
               </div>
             </main>

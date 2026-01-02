@@ -67,19 +67,25 @@ app.use(cors({
 }));
 
 // 3. Rate Limiting - Schutz vor Brute-Force
+const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000; // Default: 15 Minuten
+const rateLimitMaxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || (isDevelopment ? 1000 : 100);
+const rateLimitAuthMax = parseInt(process.env.RATE_LIMIT_AUTH_MAX) || 5;
+
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: isDevelopment ? 1000 : 100, // Development: 1000 Requests, Production: 100 Requests
+  windowMs: rateLimitWindowMs,
+  max: rateLimitMaxRequests,
   message: {
     success: false,
-    message: 'Zu viele Anfragen von dieser IP, bitte versuche es in 15 Minuten erneut'
+    message: 'Zu viele Anfragen von dieser IP, bitte versuche es später erneut'
   },
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
     // Skip Rate-Limiting für WebSocket und MQTT Endpoints in Development
-    if (isDevelopment && (req.path.includes('/socket') || req.path.includes('/mqtt'))) {
-      return true;
+    // Strikte Path-Checks: Nur exakt /socket.io oder /api/mqtt
+    if (isDevelopment) {
+      const path = req.path;
+      return path.startsWith('/socket.io') || path === '/api/mqtt' || path.startsWith('/api/mqtt/');
     }
     return false;
   }
@@ -87,11 +93,11 @@ const apiLimiter = rateLimit({
 
 // Strengeres Limit für Auth-Endpoints
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5, // Max 5 Login-Versuche in 15 Minuten
+  windowMs: rateLimitWindowMs,
+  max: rateLimitAuthMax,
   message: {
     success: false,
-    message: 'Zu viele Login-Versuche, bitte versuche es in 15 Minuten erneut'
+    message: 'Zu viele Login-Versuche, bitte versuche es später erneut'
   },
   skipSuccessfulRequests: true // Erfolgreiche Requests nicht zählen
 });
@@ -121,24 +127,15 @@ const io = new Server(server, {
 
 // Wenn sich ein Browser verbindet
 io.on('connection', (socket) => {
-  console.log('?? Frontend verbunden:', socket.id);
-  
+  console.log('📱 Frontend verbunden:', socket.id);
+
   socket.on('disconnect', () => {
-    console.log('?? Frontend getrennt:', socket.id);
+    console.log('👋 Frontend getrennt:', socket.id);
   });
 });
 
-// MQTT Daten an das Frontend weiterleiten (Br�cke)
-const { client: mqttClient } = require('./services/mqttService');
-mqttClient.on('message', (topic, message) => {
-  if (topic.includes('/data')) {
-    try {
-      const data = JSON.parse(message.toString());
-      // Sende Daten per Websocket an alle verbundenen Browser
-      io.emit('sensorData', data);
-    } catch (e) {}
-  }
-});
+// MQTT Service initialisieren (verarbeitet alle MQTT Messages intern)
+require('./services/mqttService');
 
 // ========================================
 // 📡 API ROUTEN
@@ -167,7 +164,11 @@ server.listen(PORT, '0.0.0.0', () => {
   🔒 Security:  Helmet, CORS, Rate-Limiting ✓
   🔐 Auth:      JWT-Authentifizierung ✓
   📊 Database:  MongoDB verbunden ✓
+  ⚡ Rate-Limit: ${rateLimitMaxRequests} req/${rateLimitWindowMs/60000}min
   ========================================
   Environment: ${process.env.NODE_ENV || 'development'}
   `);
 });
+
+// Export für andere Module (z.B. mqttService für Broadcasts)
+module.exports = { io, server, app };

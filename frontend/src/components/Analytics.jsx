@@ -295,7 +295,7 @@ export default function Analytics() {
     loadAllData();
     const interval = setInterval(loadAllData, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [timeRange]);
 
   const loadAllData = async () => {
     setLoading(true);
@@ -303,9 +303,9 @@ export default function Analytics() {
       setError(null);
       // Safe catch falls API nicht da ist
       if (!api) throw new Error("API Service nicht verfügbar");
-      
+
       const [historyRes, logData, plantData] = await Promise.all([
-        api.getHistory().catch(e => []),
+        api.getHistory({ hours: timeRange }).catch(e => []),
         api.getLogs().catch(e => []),
         api.getPlants().catch(e => [])
       ]);
@@ -361,19 +361,16 @@ export default function Analytics() {
     }
   };
 
-  // Chart Data (filtered & downsampled)
+  // Chart Data (downsampled for performance)
   const chartData = useMemo(() => {
     if (rawData.length === 0) return [];
-    const now = Date.now();
-    const cutoff = now - (timeRange * 60 * 60 * 1000);
-    const filtered = rawData.filter(d => d.timestamp > cutoff);
 
     const maxPoints = 300;
-    if (filtered.length <= maxPoints) return filtered;
+    if (rawData.length <= maxPoints) return rawData;
 
-    const step = Math.ceil(filtered.length / maxPoints);
-    return filtered.filter((_, index) => index % step === 0);
-  }, [rawData, timeRange]);
+    const step = Math.ceil(rawData.length / maxPoints);
+    return rawData.filter((_, index) => index % step === 0);
+  }, [rawData]);
 
   // Statistics
   const stats = useMemo(() => {
