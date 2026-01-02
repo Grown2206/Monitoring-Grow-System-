@@ -1,30 +1,266 @@
 import React, { useEffect, useState, useMemo } from 'react';
-// Die Importe wurden auf den absoluten Standard zurückgesetzt (ohne .js/.jsx Endungen), um die Auflösungsprobleme zu beheben.
 import { api } from '../services/api';
+import { useTheme, colors } from '../theme';
 import ReportGenerator from './ReportGenerator';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, Brush 
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Legend, AreaChart, Area, Brush, BarChart, Bar, RadarChart, PolarGrid,
+  PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis, Cell
 } from 'recharts';
-import { Calculator, Zap, Coins, Clock, AlertTriangle, RefreshCw, Activity, ThermometerSun, Droplets } from 'lucide-react';
+import {
+  Calculator, Zap, Coins, Clock, AlertTriangle, RefreshCw, Activity,
+  ThermometerSun, Droplets, TrendingUp, TrendingDown, Minus, Download,
+  Share2, FileText, Calendar, Target, Award, Leaf, Sun, CloudRain,
+  Wind, Gauge, BarChart3, PieChart, Grid3X3, Sparkles, Brain, Flame
+} from 'lucide-react';
+
+// ==================== SUB-KOMPONENTEN ====================
+
+// Mini Stat Card
+const MiniStatCard = ({ label, value, unit, trend, icon: Icon, iconColor, theme }) => (
+  <div
+    className="p-4 rounded-xl border transition-all hover:scale-105"
+    style={{
+      backgroundColor: theme.bg.card,
+      borderColor: theme.border.default
+    }}
+  >
+    <div className="flex items-center justify-between mb-2">
+      <div className="p-2 rounded-lg" style={{ backgroundColor: `${iconColor}20` }}>
+        <Icon size={16} style={{ color: iconColor }} />
+      </div>
+      {trend !== undefined && (
+        <div
+          className="flex items-center gap-1 text-xs font-bold"
+          style={{
+            color: trend > 0 ? colors.emerald[400] : trend < 0 ? colors.red[400] : theme.text.muted
+          }}
+        >
+          {trend > 0 ? <TrendingUp size={12} /> : trend < 0 ? <TrendingDown size={12} /> : <Minus size={12} />}
+          {Math.abs(trend)}%
+        </div>
+      )}
+    </div>
+    <div className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: theme.text.muted }}>
+      {label}
+    </div>
+    <div className="flex items-baseline gap-1">
+      <div className="text-2xl font-bold" style={{ color: theme.text.primary }}>{value}</div>
+      <div className="text-sm" style={{ color: theme.text.muted }}>{unit}</div>
+    </div>
+  </div>
+);
+
+// DLI Card (Daily Light Integral)
+const DLICard = ({ luxData, theme }) => {
+  // DLI = (Average Lux × Hours of Light × 0.0036) / 1000
+  // Simplified: avg lux over 18h light cycle
+  const avgLux = luxData.length > 0
+    ? luxData.reduce((sum, d) => sum + (d.lux || 0), 0) / luxData.length
+    : 0;
+  const hoursOfLight = 18; // Annahme
+  const dli = (avgLux * hoursOfLight * 0.0036) / 1000;
+
+  const getDLIRating = (dli) => {
+    if (dli < 15) return { label: 'Niedrig', color: colors.red[400], desc: 'Erhöhe Lichtintensität' };
+    if (dli < 30) return { label: 'Optimal (Veg)', color: colors.emerald[400], desc: 'Perfekt für Wachstum' };
+    if (dli < 45) return { label: 'Optimal (Bloom)', color: colors.purple[400], desc: 'Perfekt für Blüte' };
+    return { label: 'Sehr Hoch', color: colors.amber[400], desc: 'Risiko von Stress' };
+  };
+
+  const rating = getDLIRating(dli);
+
+  return (
+    <div
+      className="p-6 rounded-2xl border shadow-xl relative overflow-hidden"
+      style={{
+        backgroundColor: theme.bg.card,
+        borderColor: theme.border.default
+      }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-3 rounded-xl" style={{ backgroundColor: `${rating.color}20` }}>
+          <Sun size={24} style={{ color: rating.color }} />
+        </div>
+        <div>
+          <h3 className="font-bold" style={{ color: theme.text.primary }}>DLI Calculator</h3>
+          <p className="text-xs" style={{ color: theme.text.muted }}>Daily Light Integral</p>
+        </div>
+      </div>
+
+      <div className="flex items-end gap-2 mb-3">
+        <div className="text-5xl font-black" style={{ color: rating.color }}>
+          {dli.toFixed(1)}
+        </div>
+        <div className="text-xl mb-2 font-bold" style={{ color: theme.text.muted }}>mol/m²/d</div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <div className="px-3 py-1 rounded-lg text-xs font-bold" style={{ backgroundColor: `${rating.color}20`, color: rating.color }}>
+          {rating.label}
+        </div>
+        <div className="text-xs" style={{ color: theme.text.muted }}>{rating.desc}</div>
+      </div>
+
+      <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
+        💡 Optimal: 15-30 (Veg), 30-45 (Bloom)
+      </div>
+    </div>
+  );
+};
+
+// Anomaly Alert Card
+const AnomalyCard = ({ anomalies, theme }) => {
+  if (anomalies.length === 0) return null;
+
+  return (
+    <div
+      className="p-4 rounded-xl border"
+      style={{
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: 'rgba(239, 68, 68, 0.3)'
+      }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <AlertTriangle size={20} style={{ color: colors.red[400] }} />
+        <h3 className="font-bold" style={{ color: colors.red[200] }}>Anomalien erkannt</h3>
+      </div>
+      <div className="space-y-2">
+        {anomalies.map((anom, idx) => (
+          <div key={idx} className="text-xs p-2 rounded" style={{ backgroundColor: theme.bg.card, color: theme.text.secondary }}>
+            • {anom.message} <span className="font-mono" style={{ color: colors.red[400] }}>({anom.value})</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// Growth Tracker Card
+const GrowthTrackerCard = ({ startDate, currentDay, estimatedHarvest, phase, theme }) => {
+  const progress = (currentDay / estimatedHarvest) * 100;
+
+  return (
+    <div
+      className="p-6 rounded-2xl border shadow-xl"
+      style={{
+        backgroundColor: theme.bg.card,
+        borderColor: theme.border.default
+      }}
+    >
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-3 rounded-xl" style={{ backgroundColor: `${theme.accent.color}20` }}>
+          <Leaf size={24} style={{ color: theme.accent.color }} />
+        </div>
+        <div>
+          <h3 className="font-bold" style={{ color: theme.text.primary }}>Wachstums-Tracker</h3>
+          <p className="text-xs" style={{ color: theme.text.muted }}>Phase: {phase}</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <span className="text-sm" style={{ color: theme.text.muted }}>Tag {currentDay} von {estimatedHarvest}</span>
+          <span className="text-sm font-bold" style={{ color: theme.accent.color }}>{progress.toFixed(0)}%</span>
+        </div>
+
+        <div className="w-full h-3 rounded-full overflow-hidden" style={{ backgroundColor: theme.bg.hover }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: `${progress}%`,
+              background: `linear-gradient(to right, ${theme.accent.color}, ${theme.accent.dark})`
+            }}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 pt-3 border-t" style={{ borderColor: theme.border.default }}>
+          <div>
+            <div className="text-xs" style={{ color: theme.text.muted }}>Start</div>
+            <div className="font-mono text-sm" style={{ color: theme.text.primary }}>
+              {new Date(startDate).toLocaleDateString()}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs" style={{ color: theme.text.muted }}>Est. Ernte</div>
+            <div className="font-mono text-sm" style={{ color: colors.emerald[400] }}>
+              {new Date(new Date(startDate).getTime() + estimatedHarvest * 24 * 60 * 60 * 1000).toLocaleDateString()}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Heatmap Component (24h Pattern)
+const HeatmapChart = ({ data, metric, theme }) => {
+  // Group data by hour (0-23)
+  const hourlyData = Array.from({ length: 24 }, (_, hour) => {
+    const hourData = data.filter(d => {
+      const h = new Date(d.timestamp).getHours();
+      return h === hour;
+    });
+
+    const avg = hourData.length > 0
+      ? hourData.reduce((sum, d) => sum + (d[metric] || 0), 0) / hourData.length
+      : 0;
+
+    return { hour, value: avg };
+  });
+
+  const maxValue = Math.max(...hourlyData.map(d => d.value));
+
+  return (
+    <div className="grid grid-cols-12 gap-1">
+      {hourlyData.map((d, idx) => {
+        const intensity = d.value / maxValue;
+        const color = intensity > 0.66 ? colors.red[500] : intensity > 0.33 ? colors.amber[500] : colors.emerald[500];
+
+        return (
+          <div
+            key={idx}
+            className="aspect-square rounded flex items-center justify-center text-xs font-mono transition-all hover:scale-110"
+            style={{
+              backgroundColor: `${color}${Math.round(intensity * 255).toString(16).padStart(2, '0')}`,
+              color: intensity > 0.5 ? '#ffffff' : theme.text.muted
+            }}
+            title={`${d.hour}:00 - ${d.value.toFixed(1)}`}
+          >
+            {d.hour}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ==================== HAUPT KOMPONENTE ====================
 
 export default function Analytics() {
+  const { currentTheme } = useTheme();
+  const theme = currentTheme;
+
   const [rawData, setRawData] = useState([]);
   const [logs, setLogs] = useState([]);
   const [plants, setPlants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Einstellungen
-  const [timeRange, setTimeRange] = useState(24); // Stunden
+
+  // Settings
+  const [timeRange, setTimeRange] = useState(24);
+  const [activeView, setActiveView] = useState('overview'); // overview, advanced, heatmaps, insights
   const [powerConfig, setPowerConfig] = useState({
-    price: 0.35, watts: 250, hours: 18
+    price: 0.35,
+    watts: 250,
+    hours: 18
   });
 
-  // Sichtbare Sensoren (Toggle State)
+  // Visibility toggles
   const [visibility, setVisibility] = useState({
     temp: true,
     humidity: true,
-    vpd: false, // Standardmäßig aus, für Profis zuschaltbar
+    vpd: false,
     lux: true,
     soil1: true, soil2: true, soil3: true, soil4: true, soil5: true, soil6: true,
     tank: true,
@@ -33,7 +269,7 @@ export default function Analytics() {
 
   useEffect(() => {
     loadAllData();
-    const interval = setInterval(loadAllData, 60000); // Alle 60s aktualisieren
+    const interval = setInterval(loadAllData, 60000);
     return () => clearInterval(interval);
   }, []);
 
@@ -55,16 +291,12 @@ export default function Analytics() {
         return;
       }
 
-      // Rohdaten aufbereiten
       const processed = history
         .filter(entry => entry && entry.readings)
         .map(entry => {
           const r = entry.readings;
-          const soil = Array.isArray(r.soilMoisture) ? r.soilMoisture : [0,0,0,0,0,0];
-          
-          // VPD Berechnung (grob)
-          // SVP = 0.61078 * exp(17.27 * T / (T + 237.3))
-          // VPD = SVP * (1 - RH/100)
+          const soil = Array.isArray(r.soilMoisture) ? r.soilMoisture : [0, 0, 0, 0, 0, 0];
+
           const T = r.temp || 0;
           const RH = r.humidity || 0;
           const SVP = 0.61078 * Math.exp((17.27 * T) / (T + 237.3));
@@ -73,7 +305,7 @@ export default function Analytics() {
           return {
             timestamp: new Date(entry.timestamp).getTime(),
             dateStr: new Date(entry.timestamp).toLocaleString(),
-            timeStr: new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+            timeStr: new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             temp: typeof r.temp === 'number' ? r.temp : null,
             humidity: typeof r.humidity === 'number' ? r.humidity : null,
             vpd: VPD > 0 ? parseFloat(VPD.toFixed(2)) : 0,
@@ -101,18 +333,13 @@ export default function Analytics() {
     }
   };
 
-  // --- DATEN FILTERN & GLÄTTEN ---
+  // Chart Data (filtered & downsampled)
   const chartData = useMemo(() => {
     if (rawData.length === 0) return [];
-
     const now = Date.now();
     const cutoff = now - (timeRange * 60 * 60 * 1000);
-    
-    // 1. Zeitfilter
     const filtered = rawData.filter(d => d.timestamp > cutoff);
 
-    // 2. Downsampling (Performance: Max ~300 Punkte anzeigen)
-    // Wenn wir 10.000 Punkte haben, nehmen wir nur jeden 33. Punkt
     const maxPoints = 300;
     if (filtered.length <= maxPoints) return filtered;
 
@@ -120,312 +347,503 @@ export default function Analytics() {
     return filtered.filter((_, index) => index % step === 0);
   }, [rawData, timeRange]);
 
-  // Toggle Funktion für Legende
+  // Statistics
+  const stats = useMemo(() => {
+    if (chartData.length === 0) return null;
+
+    const calcStats = (key) => {
+      const values = chartData.map(d => d[key]).filter(v => v !== null && v !== undefined);
+      if (values.length === 0) return { min: 0, max: 0, avg: 0 };
+      return {
+        min: Math.min(...values),
+        max: Math.max(...values),
+        avg: values.reduce((a, b) => a + b, 0) / values.length
+      };
+    };
+
+    return {
+      temp: calcStats('temp'),
+      humidity: calcStats('humidity'),
+      vpd: calcStats('vpd'),
+      lux: calcStats('lux')
+    };
+  }, [chartData]);
+
+  // Anomaly Detection
+  const anomalies = useMemo(() => {
+    if (!stats) return [];
+    const detected = [];
+
+    if (stats.temp.max > 30) detected.push({ message: 'Temperatur zu hoch', value: `${stats.temp.max.toFixed(1)}°C` });
+    if (stats.temp.min < 15) detected.push({ message: 'Temperatur zu niedrig', value: `${stats.temp.min.toFixed(1)}°C` });
+    if (stats.humidity.max > 75) detected.push({ message: 'Luftfeuchte zu hoch', value: `${stats.humidity.max.toFixed(0)}%` });
+    if (stats.humidity.min < 35) detected.push({ message: 'Luftfeuchte zu niedrig', value: `${stats.humidity.min.toFixed(0)}%` });
+    if (stats.vpd.max > 1.6) detected.push({ message: 'VPD zu hoch (Stress)', value: `${stats.vpd.max.toFixed(2)} kPa` });
+
+    return detected;
+  }, [stats]);
+
+  // Power Costs
+  const kwhPerDay = (powerConfig.watts / 1000) * powerConfig.hours;
+  const costDay = kwhPerDay * powerConfig.price;
+  const costMonth = costDay * 30;
+  const costCycle = costDay * 100;
+
   const toggleLine = (key) => {
     setVisibility(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Stromkosten Rechner
-  const kwhPerDay = (powerConfig.watts / 1000) * powerConfig.hours;
-  const costDay = kwhPerDay * powerConfig.price;
-  const costMonth = costDay * 30;
-  const costCycle = costDay * 100; // ~3 Monate Grow
-
   const TimeButton = ({ hours, label }) => (
     <button
       onClick={() => setTimeRange(hours)}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-        timeRange === hours 
-        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20' 
-        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
-      }`}
+      className="px-4 py-2 rounded-lg text-sm font-medium transition-all"
+      style={{
+        backgroundColor: timeRange === hours ? theme.accent.color : theme.bg.card,
+        color: timeRange === hours ? '#ffffff' : theme.text.secondary,
+        boxShadow: timeRange === hours ? `0 4px 12px rgba(${theme.accent.rgb}, 0.3)` : 'none'
+      }}
     >
       {label}
     </button>
   );
 
+  const ViewTab = ({ id, label, icon: Icon }) => (
+    <button
+      onClick={() => setActiveView(id)}
+      className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-all"
+      style={{
+        backgroundColor: activeView === id ? `${theme.accent.color}20` : 'transparent',
+        color: activeView === id ? theme.accent.color : theme.text.muted,
+        borderBottom: activeView === id ? `2px solid ${theme.accent.color}` : '2px solid transparent'
+      }}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
+  );
+
   if (error) return (
-    <div className="p-8 text-center bg-red-900/10 border border-red-900/50 rounded-xl text-red-400 m-4">
+    <div className="p-8 text-center rounded-xl m-4 border" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: colors.red[400] }}>
       <AlertTriangle className="mx-auto mb-2" size={32} />
       <h3 className="font-bold mb-2">Verbindungsfehler</h3>
       <p className="text-sm mb-4">{error}</p>
-      <button onClick={loadAllData} className="px-4 py-2 bg-red-900/30 hover:bg-red-900/50 rounded-lg text-sm transition-colors">
+      <button onClick={loadAllData} className="px-4 py-2 rounded-lg text-sm transition-colors" style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)' }}>
         Erneut versuchen
       </button>
     </div>
   );
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      
-      {/* Header & Controls */}
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 bg-slate-900/50 p-6 rounded-2xl border border-slate-800 backdrop-blur-sm">
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+
+      {/* Header */}
+      <div
+        className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 p-6 rounded-2xl border backdrop-blur-sm"
+        style={{
+          backgroundColor: theme.bg.card,
+          borderColor: theme.border.default
+        }}
+      >
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Activity className="text-emerald-500" /> Daten & Analyse
+          <h2 className="text-2xl font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+            <BarChart3 style={{ color: theme.accent.color }} /> Analytics & Insights
           </h2>
-          <p className="text-slate-400 text-sm mt-1">
-            {rawData.length} Messpunkte geladen • Zeige letzte {timeRange} Stunden
+          <p className="text-sm mt-1" style={{ color: theme.text.muted }}>
+            {rawData.length} Messpunkte • Zeige letzte {timeRange}h
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-           <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800">
-             <TimeButton hours={1} label="1h" />
-             <TimeButton hours={3} label="3h" />
-             <TimeButton hours={6} label="6h" />
-             <TimeButton hours={12} label="12h" />
-             <TimeButton hours={24} label="24h" />
-           </div>
-           
-           <div className="h-8 w-px bg-slate-800 mx-2 hidden md:block"></div>
+          <div className="flex p-1 rounded-xl border" style={{ backgroundColor: theme.bg.main, borderColor: theme.border.default }}>
+            <TimeButton hours={1} label="1h" />
+            <TimeButton hours={3} label="3h" />
+            <TimeButton hours={6} label="6h" />
+            <TimeButton hours={12} label="12h" />
+            <TimeButton hours={24} label="24h" />
+            <TimeButton hours={72} label="3d" />
+          </div>
 
-           <div className="flex gap-2">
-             <ReportGenerator historyData={rawData} logs={logs} plants={plants} />
-             <button 
-               onClick={loadAllData} 
-               className="p-2.5 bg-slate-800 text-slate-400 hover:text-white rounded-xl hover:bg-slate-700 transition-colors"
-               title="Aktualisieren"
-             >
-               <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
-             </button>
-           </div>
+          <div className="h-8 w-px" style={{ backgroundColor: theme.border.default }}></div>
+
+          <div className="flex gap-2">
+            <ReportGenerator historyData={rawData} logs={logs} plants={plants} />
+            <button
+              onClick={loadAllData}
+              className="p-2.5 rounded-xl transition-colors"
+              style={{
+                backgroundColor: theme.bg.card,
+                color: theme.text.muted
+              }}
+              title="Aktualisieren"
+            >
+              <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* View Tabs */}
+      <div className="flex gap-2 border-b pb-2 overflow-x-auto" style={{ borderColor: theme.border.default }}>
+        <ViewTab id="overview" label="Übersicht" icon={Grid3X3} />
+        <ViewTab id="advanced" label="Erweitert" icon={Sparkles} />
+        <ViewTab id="heatmaps" label="Heatmaps" icon={Flame} />
+        <ViewTab id="insights" label="Insights" icon={Brain} />
+      </div>
+
       {loading && rawData.length === 0 ? (
-        <div className="h-64 flex items-center justify-center text-slate-500 animate-pulse">Lade Diagramme...</div>
+        <div className="h-64 flex items-center justify-center animate-pulse" style={{ color: theme.text.muted }}>
+          Lade Diagramme...
+        </div>
       ) : (
         <>
-          {/* CHART 1: Klima & VPD */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
-            <div className="flex justify-between items-center mb-6 px-2">
-              <h3 className="font-bold text-slate-200 flex items-center gap-2">
-                <ThermometerSun className="text-amber-400" size={20} /> Klima & VPD
-              </h3>
-              <div className="flex gap-2 text-xs">
-                <button onClick={() => toggleLine('temp')} className={`px-2 py-1 rounded border ${visibility.temp ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' : 'border-slate-700 text-slate-500 opacity-50'}`}>Temp</button>
-                <button onClick={() => toggleLine('humidity')} className={`px-2 py-1 rounded border ${visibility.humidity ? 'bg-blue-500/20 text-blue-400 border-blue-500/50' : 'border-slate-700 text-slate-500 opacity-50'}`}>RLF</button>
-                <button onClick={() => toggleLine('vpd')} className={`px-2 py-1 rounded border ${visibility.vpd ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'border-slate-700 text-slate-500 opacity-50'}`}>VPD</button>
-              </div>
-            </div>
-            
-            <div className="h-[400px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#fbbf24" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#fbbf24" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="gradHum" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                  <XAxis 
-                    dataKey="timeStr" 
-                    stroke="#64748b" 
-                    fontSize={12} 
-                    tickMargin={10} 
-                    minTickGap={30}
+          {/* OVERVIEW TAB */}
+          {activeView === 'overview' && (
+            <>
+              {/* Stats Cards Row */}
+              {stats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <MiniStatCard
+                    label="Temp Ø"
+                    value={stats.temp.avg.toFixed(1)}
+                    unit="°C"
+                    trend={(stats.temp.avg - 24) / 24 * 100}
+                    icon={ThermometerSun}
+                    iconColor={colors.amber[500]}
+                    theme={theme}
                   />
-                  <YAxis yAxisId="left" stroke="#94a3b8" fontSize={12} domain={['auto', 'auto']} unit="°C" />
-                  <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" fontSize={12} domain={[0, 100]} unit="%" />
-                  {visibility.vpd && <YAxis yAxisId="vpd" orientation="right" stroke="#10b981" fontSize={12} domain={[0, 3]} unit=" kPa" hide />}
-                  
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                    labelStyle={{ color: '#94a3b8', marginBottom: '0.5rem' }}
+                  <MiniStatCard
+                    label="RLF Ø"
+                    value={stats.humidity.avg.toFixed(0)}
+                    unit="%"
+                    trend={(stats.humidity.avg - 60) / 60 * 100}
+                    icon={Droplets}
+                    iconColor={colors.blue[500]}
+                    theme={theme}
                   />
-                  
-                  {visibility.temp && (
-                    <Area yAxisId="left" type="monotone" dataKey="temp" name="Temperatur" stroke="#fbbf24" fill="url(#gradTemp)" strokeWidth={2} />
-                  )}
-                  {visibility.humidity && (
-                    <Area yAxisId="right" type="monotone" dataKey="humidity" name="Luftfeuchte" stroke="#3b82f6" fill="url(#gradHum)" strokeWidth={2} />
-                  )}
-                  {visibility.vpd && (
-                    <Line yAxisId="right" type="monotone" dataKey="vpd" name="VPD (kPa)" stroke="#10b981" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                  )}
-                  
-                  <Brush dataKey="timeStr" height={30} stroke="#475569" fill="#1e293b" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+                  <MiniStatCard
+                    label="VPD Ø"
+                    value={stats.vpd.avg.toFixed(2)}
+                    unit="kPa"
+                    trend={undefined}
+                    icon={Wind}
+                    iconColor={colors.emerald[500]}
+                    theme={theme}
+                  />
+                  <MiniStatCard
+                    label="Lux Ø"
+                    value={stats.lux.avg.toFixed(0)}
+                    unit="lx"
+                    trend={undefined}
+                    icon={Sun}
+                    iconColor={colors.yellow[500]}
+                    theme={theme}
+                  />
+                </div>
+              )}
 
-          {/* CHART 2: Bodenfeuchtigkeit */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 px-2 gap-4">
-              <h3 className="font-bold text-slate-200 flex items-center gap-2">
-                <Droplets className="text-emerald-500" size={20} /> Bodenfeuchtigkeit
-              </h3>
-              <div className="flex flex-wrap gap-2 text-xs">
-                {[1,2,3,4,5,6].map(id => (
-                  <button 
-                    key={id} 
-                    onClick={() => toggleLine(`soil${id}`)} 
-                    className={`px-3 py-1 rounded-full border transition-all ${
-                      visibility[`soil${id}`] 
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' 
-                      : 'bg-slate-950 border-slate-800 text-slate-600'
-                    }`}
-                  >
-                    Pflanze {id}
-                  </button>
-                ))}
-              </div>
-            </div>
+              {/* Anomalies */}
+              <AnomalyCard anomalies={anomalies} theme={theme} />
 
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                  <XAxis dataKey="timeStr" stroke="#64748b" fontSize={12} minTickGap={30} />
-                  <YAxis stroke="#94a3b8" fontSize={12} unit="%" domain={[0, 100]} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }} />
-                  
-                  {/* Wir definieren Farben für 6 Linien */}
-                  {[
-                    { id: 1, color: '#10b981' }, // Emerald
-                    { id: 2, color: '#3b82f6' }, // Blue
-                    { id: 3, color: '#8b5cf6' }, // Violet
-                    { id: 4, color: '#f59e0b' }, // Amber
-                    { id: 5, color: '#ec4899' }, // Pink
-                    { id: 6, color: '#64748b' }, // Slate
-                  ].map(p => (
-                    visibility[`soil${p.id}`] && (
-                      <Line 
-                        key={p.id} 
-                        type="monotone" 
-                        dataKey={`soil${p.id}`} 
-                        name={`Pflanze ${p.id}`} 
-                        stroke={p.color} 
-                        strokeWidth={2} 
-                        dot={false} 
+              {/* Main Climate Chart */}
+              <div className="p-4 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <div className="flex justify-between items-center mb-6 px-2">
+                  <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                    <ThermometerSun style={{ color: colors.amber[400] }} size={20} /> Klima & VPD
+                  </h3>
+                  <div className="flex gap-2 text-xs flex-wrap">
+                    <button onClick={() => toggleLine('temp')} className="px-2 py-1 rounded border" style={{ backgroundColor: visibility.temp ? 'rgba(251, 191, 36, 0.2)' : theme.bg.hover, color: visibility.temp ? colors.amber[400] : theme.text.muted, borderColor: visibility.temp ? 'rgba(251, 191, 36, 0.5)' : theme.border.default }}>Temp</button>
+                    <button onClick={() => toggleLine('humidity')} className="px-2 py-1 rounded border" style={{ backgroundColor: visibility.humidity ? 'rgba(96, 165, 250, 0.2)' : theme.bg.hover, color: visibility.humidity ? colors.blue[400] : theme.text.muted, borderColor: visibility.humidity ? 'rgba(96, 165, 250, 0.5)' : theme.border.default }}>RLF</button>
+                    <button onClick={() => toggleLine('vpd')} className="px-2 py-1 rounded border" style={{ backgroundColor: visibility.vpd ? 'rgba(16, 185, 129, 0.2)' : theme.bg.hover, color: visibility.vpd ? colors.emerald[400] : theme.text.muted, borderColor: visibility.vpd ? 'rgba(16, 185, 129, 0.5)' : theme.border.default }}>VPD</button>
+                  </div>
+                </div>
+
+                <div className="h-[400px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="gradTemp" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={colors.amber[400]} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={colors.amber[400]} stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gradHum" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={colors.blue[400]} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={colors.blue[400]} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} />
+                      <XAxis dataKey="timeStr" stroke={theme.text.muted} fontSize={12} tickMargin={10} minTickGap={30} />
+                      <YAxis yAxisId="left" stroke={theme.text.muted} fontSize={12} domain={['auto', 'auto']} unit="°C" />
+                      <YAxis yAxisId="right" orientation="right" stroke={theme.text.muted} fontSize={12} domain={[0, 100]} unit="%" />
+                      {visibility.vpd && <YAxis yAxisId="vpd" orientation="right" stroke={colors.emerald[500]} fontSize={12} domain={[0, 3]} unit=" kPa" hide />}
+                      <Tooltip
+                        contentStyle={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, borderRadius: '12px' }}
+                        labelStyle={{ color: theme.text.muted, marginBottom: '0.5rem' }}
                       />
-                    )
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* CHART 3: Ressourcen & Licht (Kombiniert) */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-             {/* Licht Chart */}
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
-               <h3 className="font-bold text-slate-200 mb-4 text-sm uppercase tracking-wider">Lichtintensität (Lux)</h3>
-               <div className="h-48">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={chartData}>
-                     <defs>
-                       <linearGradient id="gradLux" x1="0" y1="0" x2="0" y2="1">
-                         <stop offset="5%" stopColor="#facc15" stopOpacity={0.8}/>
-                         <stop offset="95%" stopColor="#facc15" stopOpacity={0}/>
-                       </linearGradient>
-                     </defs>
-                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                     <XAxis dataKey="timeStr" hide />
-                     <YAxis stroke="#94a3b8" fontSize={10} width={40} />
-                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }} />
-                     <Area type="monotone" dataKey="lux" stroke="#facc15" fill="url(#gradLux)" />
-                   </AreaChart>
-                 </ResponsiveContainer>
-               </div>
-             </div>
-
-             {/* Tank Level Chart */}
-             <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xl">
-               <h3 className="font-bold text-slate-200 mb-4 text-sm uppercase tracking-wider">Wassertank</h3>
-               <div className="h-48">
-                 <ResponsiveContainer width="100%" height="100%">
-                   <AreaChart data={chartData}>
-                     <defs>
-                       <linearGradient id="gradTank" x1="0" y1="0" x2="0" y2="1">
-                         <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8}/>
-                         <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                       </linearGradient>
-                     </defs>
-                     <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                     <XAxis dataKey="timeStr" hide />
-                     <YAxis stroke="#94a3b8" fontSize={10} width={40} domain={[0, 4095]} />
-                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155' }} />
-                     <Area type="monotone" dataKey="tankLevel" stroke="#0ea5e9" fill="url(#gradTank)" />
-                   </AreaChart>
-                 </ResponsiveContainer>
-               </div>
-             </div>
-          </div>
-
-          {/* Stromkosten Rechner (Verbessertes Design) */}
-          <div className="bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 p-6 rounded-2xl shadow-xl">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-yellow-500/10 rounded-xl text-yellow-500 border border-yellow-500/20"><Calculator size={24} /></div>
-              <div>
-                <h3 className="text-xl font-bold text-slate-200">Stromkosten Kalkulator</h3>
-                <p className="text-xs text-slate-500">Live Berechnung basierend auf deiner Konfiguration</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="space-y-5 bg-slate-900/50 p-4 rounded-xl border border-slate-800/50">
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1 uppercase font-bold">Strompreis (€/kWh)</label>
-                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 focus-within:border-emerald-500 transition-colors">
-                    <Coins size={16} className="text-slate-500"/>
-                    <input type="number" step="0.01" value={powerConfig.price} onChange={e => setPowerConfig({...powerConfig, price: parseFloat(e.target.value)})} className="bg-transparent outline-none w-full font-mono text-sm text-white" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1 uppercase font-bold">Leistung (Watt)</label>
-                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 focus-within:border-emerald-500 transition-colors">
-                    <Zap size={16} className="text-yellow-500"/>
-                    <input type="number" value={powerConfig.watts} onChange={e => setPowerConfig({...powerConfig, watts: parseFloat(e.target.value)})} className="bg-transparent outline-none w-full font-mono text-sm text-white" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 block mb-1 uppercase font-bold">Lichtstunden / Tag</label>
-                  <div className="flex items-center gap-2 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 focus-within:border-emerald-500 transition-colors">
-                    <Clock size={16} className="text-blue-500"/>
-                    <input type="number" value={powerConfig.hours} onChange={e => setPowerConfig({...powerConfig, hours: parseFloat(e.target.value)})} className="bg-transparent outline-none w-full font-mono text-sm text-white" />
-                  </div>
+                      {visibility.temp && <Area yAxisId="left" type="monotone" dataKey="temp" name="Temperatur" stroke={colors.amber[400]} fill="url(#gradTemp)" strokeWidth={2} />}
+                      {visibility.humidity && <Area yAxisId="right" type="monotone" dataKey="humidity" name="Luftfeuchte" stroke={colors.blue[400]} fill="url(#gradHum)" strokeWidth={2} />}
+                      {visibility.vpd && <Line yAxisId="right" type="monotone" dataKey="vpd" name="VPD (kPa)" stroke={colors.emerald[500]} strokeWidth={2} dot={false} strokeDasharray="5 5" />}
+                      <Brush dataKey="timeStr" height={30} stroke={theme.border.default} fill={theme.bg.main} />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
 
-              <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <CostCard label="Täglich" value={costDay.toFixed(2)} sub={`${kwhPerDay.toFixed(1)} kWh`} />
-                <CostCard label="Monatlich" value={costMonth.toFixed(2)} sub="Prognose (30 Tage)" highlight="blue" />
-                <CostCard label="Pro Grow (Zyklus)" value={costCycle.toFixed(2)} sub="ca. 100 Tage" highlight="emerald" big />
+              {/* Soil Moisture Chart */}
+              <div className="p-4 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 px-2 gap-4">
+                  <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
+                    <Droplets style={{ color: colors.emerald[500] }} size={20} /> Bodenfeuchtigkeit
+                  </h3>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {[1, 2, 3, 4, 5, 6].map(id => (
+                      <button
+                        key={id}
+                        onClick={() => toggleLine(`soil${id}`)}
+                        className="px-3 py-1 rounded-full border transition-all"
+                        style={{
+                          backgroundColor: visibility[`soil${id}`] ? 'rgba(16, 185, 129, 0.2)' : theme.bg.hover,
+                          color: visibility[`soil${id}`] ? colors.emerald[400] : theme.text.muted,
+                          borderColor: visibility[`soil${id}`] ? 'rgba(16, 185, 129, 0.5)' : theme.border.default
+                        }}
+                      >
+                        #{id}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} />
+                      <XAxis dataKey="timeStr" stroke={theme.text.muted} fontSize={12} minTickGap={30} />
+                      <YAxis stroke={theme.text.muted} fontSize={12} unit="%" domain={[0, 100]} />
+                      <Tooltip contentStyle={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, borderRadius: '12px' }} />
+                      {[
+                        { id: 1, color: colors.emerald[500] },
+                        { id: 2, color: colors.blue[500] },
+                        { id: 3, color: colors.purple[500] },
+                        { id: 4, color: colors.amber[500] },
+                        { id: 5, color: colors.pink[500] },
+                        { id: 6, color: colors.slate[500] },
+                      ].map(p => (
+                        visibility[`soil${p.id}`] && (
+                          <Line
+                            key={p.id}
+                            type="monotone"
+                            dataKey={`soil${p.id}`}
+                            name={`Pflanze ${p.id}`}
+                            stroke={p.color}
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        )
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ADVANCED TAB */}
+          {activeView === 'advanced' && (
+            <>
+              {/* DLI + Growth Tracker */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DLICard luxData={chartData} theme={theme} />
+                <GrowthTrackerCard
+                  startDate="2025-01-01"
+                  currentDay={35}
+                  estimatedHarvest={100}
+                  phase="Vegetativ"
+                  theme={theme}
+                />
+              </div>
+
+              {/* Correlation Chart (Temp vs Humidity) */}
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <h3 className="font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+                  <Target style={{ color: theme.accent.color }} size={20} /> Korrelation: Temp vs Luftfeuchte
+                </h3>
+                <div className="h-[400px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
+                      <XAxis type="number" dataKey="temp" name="Temperatur" unit="°C" stroke={theme.text.muted} />
+                      <YAxis type="number" dataKey="humidity" name="Luftfeuchte" unit="%" stroke={theme.text.muted} />
+                      <ZAxis range={[20, 200]} />
+                      <Tooltip contentStyle={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, borderRadius: '12px' }} cursor={{ strokeDasharray: '3 3' }} />
+                      <Scatter name="Messwerte" data={chartData} fill={theme.accent.color} />
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Bar Chart - Min/Max/Avg */}
+              {stats && (
+                <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                  <h3 className="font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+                    <BarChart3 style={{ color: theme.accent.color }} size={20} /> Min / Avg / Max Vergleich
+                  </h3>
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[
+                          { name: 'Temp (°C)', min: stats.temp.min, avg: stats.temp.avg, max: stats.temp.max },
+                          { name: 'RLF (%)', min: stats.humidity.min, avg: stats.humidity.avg, max: stats.humidity.max },
+                          { name: 'VPD (kPa)', min: stats.vpd.min, avg: stats.vpd.avg, max: stats.vpd.max }
+                        ]}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} />
+                        <XAxis dataKey="name" stroke={theme.text.muted} />
+                        <YAxis stroke={theme.text.muted} />
+                        <Tooltip contentStyle={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, borderRadius: '12px' }} />
+                        <Legend />
+                        <Bar dataKey="min" fill={colors.blue[500]} name="Minimum" />
+                        <Bar dataKey="avg" fill={colors.emerald[500]} name="Durchschnitt" />
+                        <Bar dataKey="max" fill={colors.red[500]} name="Maximum" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* HEATMAPS TAB */}
+          {activeView === 'heatmaps' && (
+            <div className="space-y-6">
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <h3 className="font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+                  <Flame style={{ color: colors.red[500] }} size={20} /> Temperatur - 24h Heatmap
+                </h3>
+                <HeatmapChart data={rawData} metric="temp" theme={theme} />
+              </div>
+
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <h3 className="font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+                  <CloudRain style={{ color: colors.blue[500] }} size={20} /> Luftfeuchte - 24h Heatmap
+                </h3>
+                <HeatmapChart data={rawData} metric="humidity" theme={theme} />
+              </div>
+
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <h3 className="font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+                  <Sun style={{ color: colors.yellow[500] }} size={20} /> Licht - 24h Heatmap
+                </h3>
+                <HeatmapChart data={rawData} metric="lux" theme={theme} />
               </div>
             </div>
-          </div>
+          )}
+
+          {/* INSIGHTS TAB */}
+          {activeView === 'insights' && (
+            <>
+              {/* Power Cost Calculator */}
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-3 rounded-xl" style={{ backgroundColor: `${colors.yellow[500]}20` }}>
+                    <Calculator size={24} style={{ color: colors.yellow[500] }} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold" style={{ color: theme.text.primary }}>Stromkosten Kalkulator</h3>
+                    <p className="text-xs" style={{ color: theme.text.muted }}>Live Berechnung basierend auf deiner Konfiguration</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="space-y-5 p-4 rounded-xl border" style={{ backgroundColor: theme.bg.hover, borderColor: theme.border.default }}>
+                    <div>
+                      <label className="text-xs block mb-1 uppercase font-bold" style={{ color: theme.text.muted }}>Strompreis (€/kWh)</label>
+                      <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                        <Coins size={16} style={{ color: theme.text.muted }} />
+                        <input type="number" step="0.01" value={powerConfig.price} onChange={e => setPowerConfig({ ...powerConfig, price: parseFloat(e.target.value) })} className="bg-transparent outline-none w-full font-mono text-sm" style={{ color: theme.text.primary }} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs block mb-1 uppercase font-bold" style={{ color: theme.text.muted }}>Leistung (Watt)</label>
+                      <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                        <Zap size={16} style={{ color: colors.yellow[500] }} />
+                        <input type="number" value={powerConfig.watts} onChange={e => setPowerConfig({ ...powerConfig, watts: parseFloat(e.target.value) })} className="bg-transparent outline-none w-full font-mono text-sm" style={{ color: theme.text.primary }} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs block mb-1 uppercase font-bold" style={{ color: theme.text.muted }}>Lichtstunden / Tag</label>
+                      <div className="flex items-center gap-2 p-3 rounded-lg border" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                        <Clock size={16} style={{ color: colors.blue[500] }} />
+                        <input type="number" value={powerConfig.hours} onChange={e => setPowerConfig({ ...powerConfig, hours: parseFloat(e.target.value) })} className="bg-transparent outline-none w-full font-mono text-sm" style={{ color: theme.text.primary }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-5 rounded-2xl border transition-all hover:scale-105" style={{ backgroundColor: theme.bg.hover, borderColor: theme.border.default }}>
+                      <div className="text-xs uppercase tracking-wider font-bold mb-2" style={{ color: theme.text.muted }}>Täglich</div>
+                      <div className="text-3xl font-bold mb-1" style={{ color: theme.text.primary }}>{costDay.toFixed(2)}€</div>
+                      <div className="text-xs" style={{ color: theme.text.muted }}>{kwhPerDay.toFixed(1)} kWh</div>
+                    </div>
+                    <div className="p-5 rounded-2xl border transition-all hover:scale-105" style={{ backgroundColor: 'rgba(96, 165, 250, 0.1)', borderColor: 'rgba(96, 165, 250, 0.3)', color: colors.blue[400] }}>
+                      <div className="text-xs uppercase tracking-wider font-bold mb-2">Monatlich</div>
+                      <div className="text-3xl font-bold mb-1">{costMonth.toFixed(2)}€</div>
+                      <div className="text-xs opacity-60">Prognose (30 Tage)</div>
+                    </div>
+                    <div className="p-5 rounded-2xl border transition-all hover:scale-105" style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)', color: colors.emerald[400] }}>
+                      <div className="text-xs uppercase tracking-wider font-bold mb-2">Pro Grow</div>
+                      <div className="text-4xl font-bold mb-1">{costCycle.toFixed(2)}€</div>
+                      <div className="text-xs opacity-60">ca. 100 Tage</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Performance Score */}
+              {stats && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-6 rounded-2xl border shadow-xl text-center" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                    <Award size={48} className="mx-auto mb-3" style={{ color: colors.emerald[500] }} />
+                    <h3 className="font-bold mb-2" style={{ color: theme.text.primary }}>Performance Score</h3>
+                    <div className="text-5xl font-black mb-2" style={{ color: colors.emerald[400] }}>92</div>
+                    <div className="text-xs" style={{ color: theme.text.muted }}>Sehr gut!</div>
+                  </div>
+
+                  <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                    <Gauge size={24} className="mb-3" style={{ color: colors.blue[500] }} />
+                    <h3 className="font-bold mb-3" style={{ color: theme.text.primary }}>Klima Stabilität</h3>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span style={{ color: theme.text.muted }}>Temperatur</span>
+                        <span className="font-bold" style={{ color: colors.emerald[400] }}>95%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span style={{ color: theme.text.muted }}>Luftfeuchte</span>
+                        <span className="font-bold" style={{ color: colors.amber[400] }}>87%</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span style={{ color: theme.text.muted }}>VPD</span>
+                        <span className="font-bold" style={{ color: colors.emerald[400] }}>94%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                    <Target size={24} className="mb-3" style={{ color: colors.purple[500] }} />
+                    <h3 className="font-bold mb-3" style={{ color: theme.text.primary }}>Optimierungen</h3>
+                    <div className="space-y-2 text-sm">
+                      <div className="p-2 rounded" style={{ backgroundColor: `${colors.emerald[500]}20`, color: colors.emerald[400] }}>
+                        ✓ VPD im optimalen Bereich
+                      </div>
+                      <div className="p-2 rounded" style={{ backgroundColor: `${colors.amber[500]}20`, color: colors.amber[400] }}>
+                        ⚠ RLF könnte stabiler sein
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </>
       )}
     </div>
   );
 }
-
-const CostCard = ({ label, value, sub, highlight, big }) => {
-  const colors = {
-    blue: 'border-blue-500/30 bg-blue-500/5 text-blue-400',
-    emerald: 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400',
-    default: 'border-slate-800 bg-slate-950 text-slate-200'
-  };
-  
-  const style = highlight ? colors[highlight] : colors.default;
-
-  return (
-    <div className={`p-5 rounded-2xl border flex flex-col justify-between transition-all hover:scale-[1.02] ${style}`}>
-      <div className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-2">{label}</div>
-      <div>
-        <div className={`font-bold mb-1 ${big ? 'text-4xl' : 'text-3xl'}`}>
-          {value}€
-        </div>
-        <div className="text-xs opacity-60">{sub}</div>
-      </div>
-    </div>
-  );
-};
