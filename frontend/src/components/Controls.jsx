@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
+import { controlsAPI } from '../utils/api';
 import { useTheme, colors } from '../theme';
 import {
   Lock, Unlock, AlertTriangle, Power, Zap, Wind, Droplets, Lightbulb,
@@ -200,6 +201,147 @@ const PowerChart = ({ data, theme }) => (
   </div>
 );
 
+// PWM Control Card
+const PWMControl = ({ icon: Icon, label, subLabel, value, onChange, rpm, color, theme }) => (
+  <div
+    className="p-5 rounded-2xl border transition-all"
+    style={{
+      backgroundColor: theme.bg.card,
+      borderColor: value > 0 ? color : theme.border.default,
+      boxShadow: value > 0 ? `0 0 20px ${color}20` : 'none'
+    }}
+  >
+    <div className="flex items-center gap-3 mb-4">
+      <div
+        className="p-3 rounded-xl"
+        style={{
+          backgroundColor: value > 0 ? `${color}20` : theme.bg.hover,
+          color: value > 0 ? color : theme.text.muted
+        }}
+      >
+        <Icon size={24} />
+      </div>
+      <div className="flex-1">
+        <h4 className="font-bold" style={{ color: theme.text.primary }}>{label}</h4>
+        <p className="text-xs" style={{ color: theme.text.muted }}>{subLabel}</p>
+      </div>
+      <div className="text-right">
+        <div className="text-2xl font-bold" style={{ color }}>{value}%</div>
+        {rpm !== undefined && (
+          <div className="text-xs font-mono" style={{ color: theme.text.muted }}>{rpm} RPM</div>
+        )}
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={value}
+        onChange={(e) => onChange(parseInt(e.target.value))}
+        className="w-full h-3 rounded-full appearance-none cursor-pointer"
+        style={{
+          background: `linear-gradient(to right, ${color} 0%, ${color} ${value}%, ${theme.bg.hover} ${value}%, ${theme.bg.hover} 100%)`
+        }}
+      />
+      <div className="flex justify-between text-xs font-mono" style={{ color: theme.text.muted }}>
+        <span>0%</span>
+        <span>25%</span>
+        <span>50%</span>
+        <span>75%</span>
+        <span>100%</span>
+      </div>
+    </div>
+
+    {/* Voltage Indicator (for 0-10V) */}
+    <div className="mt-3 pt-3 border-t flex justify-between items-center text-xs" style={{ borderColor: `${theme.border.default}50` }}>
+      <span style={{ color: theme.text.muted }}>Output Voltage:</span>
+      <span className="font-mono font-bold" style={{ color }}>{(value / 10).toFixed(1)}V</span>
+    </div>
+  </div>
+);
+
+// RJ11 Light Control Card
+const RJ11LightControl = ({ enabled, pwm, onToggle, onPWMChange, theme }) => (
+  <div
+    className="p-5 rounded-2xl border transition-all"
+    style={{
+      backgroundColor: theme.bg.card,
+      borderColor: enabled ? colors.amber[400] : theme.border.default,
+      boxShadow: enabled ? `0 0 20px ${colors.amber[400]}20` : 'none'
+    }}
+  >
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-3">
+        <div
+          className="p-3 rounded-xl"
+          style={{
+            backgroundColor: enabled ? `${colors.amber[400]}20` : theme.bg.hover,
+            color: enabled ? colors.amber[400] : theme.text.muted
+          }}
+        >
+          <Lightbulb size={24} />
+        </div>
+        <div>
+          <h4 className="font-bold" style={{ color: theme.text.primary }}>RJ11 Grow Light</h4>
+          <p className="text-xs" style={{ color: theme.text.muted }}>PWM Dimming via RJ11</p>
+        </div>
+      </div>
+      <button
+        onClick={onToggle}
+        className="w-12 h-7 rounded-full transition-colors"
+        style={{ backgroundColor: enabled ? colors.emerald[600] : theme.bg.hover }}
+      >
+        <span
+          className="block w-5 h-5 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1"
+          style={{ transform: enabled ? 'translateX(20px)' : 'translateX(0)' }}
+        />
+      </button>
+    </div>
+
+    {enabled && (
+      <>
+        <div className="mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold" style={{ color: theme.text.secondary }}>Light Intensity</span>
+            <span className="text-xl font-bold font-mono" style={{ color: colors.amber[400] }}>{pwm}%</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={pwm}
+            onChange={(e) => onPWMChange(parseInt(e.target.value))}
+            className="w-full h-3 rounded-full appearance-none cursor-pointer"
+            style={{
+              background: `linear-gradient(to right, ${colors.amber[400]} 0%, ${colors.amber[400]} ${pwm}%, ${theme.bg.hover} ${pwm}%, ${theme.bg.hover} 100%)`
+            }}
+          />
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {[25, 50, 75, 100].map(preset => (
+            <button
+              key={preset}
+              onClick={() => onPWMChange(preset)}
+              className="py-2 px-3 rounded-lg text-xs font-bold transition-all"
+              style={{
+                backgroundColor: pwm === preset ? `${colors.amber[400]}20` : theme.bg.hover,
+                color: pwm === preset ? colors.amber[400] : theme.text.muted,
+                borderWidth: '1px',
+                borderColor: pwm === preset ? colors.amber[400] : 'transparent'
+              }}
+            >
+              {preset}%
+            </button>
+          ))}
+        </div>
+      </>
+    )}
+  </div>
+);
+
 // ==================== HAUPT KOMPONENTE ====================
 
 export default function Controls() {
@@ -224,6 +366,12 @@ export default function Controls() {
     heater: { on: false, runtime: 0, health: 100 },
     dehumidifier: { on: false, runtime: 0, health: 85 }
   });
+
+  // PWM State (0-100%)
+  const [fanPWM, setFanPWM] = useState(0);
+  const [lightPWM, setLightPWM] = useState(0);
+  const [lightRJ11Enabled, setLightRJ11Enabled] = useState(false);
+  const [fanRPM, setFanRPM] = useState(0);
 
   // Automation Rules
   const [automation, setAutomation] = useState({
@@ -358,6 +506,41 @@ export default function Controls() {
       light: { ...prev.light, dimLevel: level }
     }));
     addLog(`Licht Helligkeit: ${level}%`);
+  };
+
+  // PWM Handler
+  const handleFanPWMChange = async (value) => {
+    setFanPWM(value);
+    try {
+      await controlsAPI.setFanPWM(value);
+      addLog(`Fan PWM gesetzt: ${value}%`);
+    } catch (err) {
+      console.error('Fan PWM Fehler:', err);
+      showAlert('Fan PWM konnte nicht gesetzt werden', 'error');
+    }
+  };
+
+  const handleLightPWMChange = async (value) => {
+    setLightPWM(value);
+    try {
+      await controlsAPI.setLightPWM(value);
+      addLog(`Light PWM gesetzt: ${value}%`);
+    } catch (err) {
+      console.error('Light PWM Fehler:', err);
+      showAlert('Light PWM konnte nicht gesetzt werden', 'error');
+    }
+  };
+
+  const handleLightRJ11Toggle = async () => {
+    const newState = !lightRJ11Enabled;
+    setLightRJ11Enabled(newState);
+    try {
+      await controlsAPI.setLightEnable(newState);
+      addLog(`RJ11 Light ${newState ? 'aktiviert' : 'deaktiviert'}`);
+    } catch (err) {
+      console.error('RJ11 Enable Fehler:', err);
+      showAlert('RJ11 Light konnte nicht geschaltet werden', 'error');
+    }
   };
 
   const activateScene = (scene) => {
@@ -666,6 +849,33 @@ export default function Controls() {
               disabled={safetyLocked}
               theme={theme}
             />
+          </div>
+
+          {/* PWM STEUERUNG */}
+          <div className="mt-8">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2" style={{ color: theme.text.primary }}>
+              <Sliders size={24} style={{ color: theme.accent.color }} />
+              PWM Steuerung (0-10V)
+            </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <PWMControl
+                icon={Fan}
+                label="Abluftfilter PWM"
+                subLabel="0-10V Steuerung + Tachometer"
+                value={fanPWM}
+                onChange={handleFanPWMChange}
+                rpm={fanRPM}
+                color={colors.blue[400]}
+                theme={theme}
+              />
+              <RJ11LightControl
+                enabled={lightRJ11Enabled}
+                pwm={lightPWM}
+                onToggle={handleLightRJ11Toggle}
+                onPWMChange={handleLightPWMChange}
+                theme={theme}
+              />
+            </div>
           </div>
         </>
       )}

@@ -1,6 +1,8 @@
 const SensorLog = require('../models/SensorLog');
 
 // INTERNE Funktion zum Speichern (wird von MQTT/Sensor-Service aufgerufen)
+const DeviceState = require('../models/DeviceState');
+
 const saveSensorData = async (dataPayload) => {
   try {
     if (!dataPayload) return;
@@ -18,6 +20,20 @@ const saveSensorData = async (dataPayload) => {
     });
 
     await newLog.save();
+
+    // PWM & RPM Daten separat speichern (wenn vorhanden)
+    if (dataPayload.fanPWM !== undefined || dataPayload.lightPWM !== undefined || dataPayload.fanRPM !== undefined) {
+      await DeviceState.updateState({
+        pwm: {
+          fan_exhaust: dataPayload.fanPWM || 0,
+          grow_light: dataPayload.lightPWM || 0
+        },
+        feedback: {
+          fan_exhaust_rpm: dataPayload.fanRPM || 0
+        }
+      });
+    }
+
     console.log(`💾 Daten gespeichert (Temp: ${dataPayload.temp}°C)`);
     return true;
 

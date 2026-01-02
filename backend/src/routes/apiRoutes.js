@@ -136,6 +136,104 @@ router.post('/controls/relay', optionalAuth, (req, res) => {
   });
 });
 
+// PWM Steuerung - Abluftfilter
+router.post('/controls/fan-pwm', optionalAuth, (req, res) => {
+  const { value } = req.body;
+
+  if (value === undefined || value < 0 || value > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "PWM Wert muss zwischen 0-100 liegen"
+    });
+  }
+
+  const command = {
+    action: 'set_fan_pwm',
+    value: parseInt(value)
+  };
+
+  mqttService.publish(TOPIC_COMMAND, JSON.stringify(command));
+
+  console.log(`🌀 Fan PWM gesetzt: ${value}%`);
+  res.json({
+    success: true,
+    message: "Fan PWM gesetzt",
+    value: parseInt(value)
+  });
+});
+
+// PWM Steuerung - RJ11 Grow Light
+router.post('/controls/light-pwm', optionalAuth, (req, res) => {
+  const { value } = req.body;
+
+  if (value === undefined || value < 0 || value > 100) {
+    return res.status(400).json({
+      success: false,
+      message: "PWM Wert muss zwischen 0-100 liegen"
+    });
+  }
+
+  const command = {
+    action: 'set_light_pwm',
+    value: parseInt(value)
+  };
+
+  mqttService.publish(TOPIC_COMMAND, JSON.stringify(command));
+
+  console.log(`💡 Light PWM gesetzt: ${value}%`);
+  res.json({
+    success: true,
+    message: "Light PWM gesetzt",
+    value: parseInt(value)
+  });
+});
+
+// RJ11 Light Enable/Disable
+router.post('/controls/light-enable', optionalAuth, (req, res) => {
+  const { enabled } = req.body;
+
+  if (enabled === undefined) {
+    return res.status(400).json({
+      success: false,
+      message: "Fehlender Parameter (enabled)"
+    });
+  }
+
+  const command = {
+    action: 'set_light_enable',
+    enabled: !!enabled
+  };
+
+  mqttService.publish(TOPIC_COMMAND, JSON.stringify(command));
+
+  console.log(`💡 RJ11 Light: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  res.json({
+    success: true,
+    message: `Light ${enabled ? 'aktiviert' : 'deaktiviert'}`,
+    enabled: !!enabled
+  });
+});
+
+// Device Status abrufen (PWM, RPM, etc.)
+router.get('/controls/device-state', optionalAuth, async (req, res, next) => {
+  try {
+    const DeviceState = require('../models/DeviceState');
+    const state = await DeviceState.getLatest();
+
+    res.json({
+      success: true,
+      data: state || {
+        relays: {},
+        pwm: { fan_exhaust: 0, grow_light: 0 },
+        feedback: { fan_exhaust_rpm: 0 },
+        rj11: { enabled: false, dimLevel: 100, mode: 'off' }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ESP Neustart (Reboot)
 router.post('/system/reboot', optionalAuth, (req, res) => {
   mqttService.publish(TOPIC_COMMAND, JSON.stringify({ action: 'reboot' }));
