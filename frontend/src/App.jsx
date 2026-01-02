@@ -92,10 +92,11 @@ function AppContent() {
     );
   }
 
-  // Nicht eingeloggt -> Login-Screen
-  if (!isAuthenticated) {
-    return <Login onSuccess={() => setActiveTab('dashboard')} />;
-  }
+  // Login ist jetzt OPTIONAL - App funktioniert auch ohne Login
+  // Kommentiert aus damit App OHNE Login funktioniert
+  // if (!isAuthenticated) {
+  //   return <Login onSuccess={() => setActiveTab('dashboard')} />;
+  // }
 
   const getPageTitle = () => {
     switch(activeTab) {
