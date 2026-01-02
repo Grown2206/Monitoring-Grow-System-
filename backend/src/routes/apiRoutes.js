@@ -16,6 +16,10 @@ const notificationController = require('../controllers/notificationController');
 const weatherController = require('../controllers/weatherController');
 const recipeController = require('../controllers/recipeController');
 const analyticsController = require('../controllers/analyticsController');
+const nutrientRoutes = require('./nutrientRoutes');
+const vpdRoutes = require('./vpdRoutes');
+const sensorRoutes = require('./sensorRoutes');
+const timelapseRoutes = require('./timelapseRoutes');
 
 // MQTT Topics (MÜSSEN MIT ARDUINO ÜBEREINSTIMMEN)
 const TOPIC_CONFIG = 'grow_drexl_v2/config';
@@ -288,5 +292,25 @@ router.post('/recipes/:id/like', optionalAuth, validateObjectId('id'), recipeCon
 router.get('/analytics/anomalies', optionalAuth, analyticsController.getAnomalies);
 router.get('/analytics/predictions', optionalAuth, analyticsController.getPredictions);
 router.get('/analytics/optimizations', optionalAuth, analyticsController.getOptimizations);
+
+// ==========================================
+// 11. NÄHRSTOFF-MANAGEMENT (Public - optional auth)
+// ==========================================
+router.use('/nutrients', nutrientRoutes);
+
+// ==========================================
+// 12. VPD-STEUERUNG (Public - optional auth)
+// ==========================================
+router.use('/vpd', vpdRoutes);
+
+// ==========================================
+// 13. EC/pH SENSOREN (Public - optional auth)
+// ==========================================
+router.use('/sensors', sensorRoutes);
+
+// ==========================================
+// 14. TIMELAPSE (Public - optional auth)
+// ==========================================
+router.use('/timelapse', timelapseRoutes);
 
 module.exports = router;

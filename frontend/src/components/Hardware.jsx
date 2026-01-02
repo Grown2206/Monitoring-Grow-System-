@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
-import { 
-  Cpu, Wifi, Thermometer, Droplets, Database, Server, RefreshCw, 
-  Settings, CheckCircle2, AlertTriangle, XCircle, Activity, Sprout 
+import { controlsAPI } from '../utils/api';
+import {
+  Cpu, Wifi, Thermometer, Droplets, Database, Server, RefreshCw,
+  Settings, CheckCircle2, AlertTriangle, XCircle, Activity, Sprout,
+  Zap, Fan, Lightbulb, Wind, Gauge, Power
 } from 'lucide-react';
 
 const SensorStatus = ({ name, value, status, type }) => (
@@ -31,6 +33,25 @@ const SensorStatus = ({ name, value, status, type }) => (
 export default function Hardware() {
   const { sensorData, isConnected } = useSocket();
   const [calibrating, setCalibrating] = useState(false);
+  const [deviceState, setDeviceState] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDeviceState();
+    const interval = setInterval(loadDeviceState, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadDeviceState = async () => {
+    try {
+      const state = await controlsAPI.getDeviceState();
+      setDeviceState(state);
+    } catch (error) {
+      console.error('Failed to load device state:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleCalibrate = () => {
     setCalibrating(true);
@@ -166,9 +187,9 @@ export default function Hardware() {
             <p className="text-xs text-slate-500 mb-4">
               Zum Kalibrieren der Bodenfeuchtesensoren: Sensoren erst komplett trocknen, dann Wert speichern. Danach in Wasser stellen und erneut messen.
             </p>
-            
+
             <div className="flex gap-3">
-              <button 
+              <button
                 onClick={handleCalibrate}
                 disabled={calibrating}
                 className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3 rounded-xl text-sm font-bold border border-slate-700 transition-all flex items-center justify-center gap-2"
@@ -179,6 +200,176 @@ export default function Hardware() {
           </div>
         </div>
       </div>
+
+      {/* Neue Sektion: Hardware Status & PWM */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Relais Status */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+          <h3 className="text-white font-bold flex items-center gap-2 mb-6">
+            <Power size={18} className="text-yellow-500" /> Relais Status
+          </h3>
+          <div className="space-y-3">
+            {deviceState?.relays && Object.entries(deviceState.relays).map(([key, value]) => (
+              <div key={key} className="flex justify-between items-center text-sm p-2 rounded-lg bg-slate-950">
+                <span className="text-slate-400 capitalize">{key.replace(/_/g, ' ')}</span>
+                <span className={`flex items-center gap-2 font-bold ${value ? 'text-emerald-400' : 'text-slate-600'}`}>
+                  {value ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+                  {value ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* PWM Status */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+          <h3 className="text-white font-bold flex items-center gap-2 mb-6">
+            <Zap size={18} className="text-purple-500" /> PWM Steuerung
+          </h3>
+          <div className="space-y-4">
+            {/* Fan PWM */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-slate-400 text-sm flex items-center gap-2">
+                  <Fan size={14} /> Abluft PWM
+                </span>
+                <span className="text-emerald-400 font-mono font-bold">
+                  {getVal(deviceState?.pwm?.fan_exhaust, 0, '%')}
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all"
+                  style={{ width: `${deviceState?.pwm?.fan_exhaust || 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Light PWM */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-slate-400 text-sm flex items-center gap-2">
+                  <Lightbulb size={14} /> Grow Light PWM
+                </span>
+                <span className="text-yellow-400 font-mono font-bold">
+                  {getVal(deviceState?.pwm?.grow_light, 0, '%')}
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-500 to-yellow-500 transition-all"
+                  style={{ width: `${deviceState?.pwm?.grow_light || 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Fan RPM Feedback */}
+            <div className="mt-4 pt-4 border-t border-slate-800">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 text-sm flex items-center gap-2">
+                  <Gauge size={14} /> Fan RPM
+                </span>
+                <span className="text-emerald-400 font-mono font-bold">
+                  {getVal(deviceState?.feedback?.fan_exhaust_rpm, 0, ' RPM')}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RJ11 Grow Light Control */}
+        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl shadow-lg">
+          <h3 className="text-white font-bold flex items-center gap-2 mb-6">
+            <Lightbulb size={18} className="text-amber-500" /> RJ11 Grow Light
+          </h3>
+          <div className="space-y-4">
+            <div className="flex justify-between items-center p-2 rounded-lg bg-slate-950">
+              <span className="text-slate-400 text-sm">Status</span>
+              <span className={`font-bold ${deviceState?.rj11?.enabled ? 'text-emerald-400' : 'text-slate-600'}`}>
+                {deviceState?.rj11?.enabled ? 'Aktiv' : 'Inaktiv'}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center p-2 rounded-lg bg-slate-950">
+              <span className="text-slate-400 text-sm">Modus</span>
+              <span className="text-purple-400 font-bold uppercase text-xs">
+                {deviceState?.rj11?.mode || 'OFF'}
+              </span>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-slate-400 text-sm">Dimm-Level</span>
+                <span className="text-amber-400 font-mono font-bold">
+                  {getVal(deviceState?.rj11?.dimLevel, 0, '%')}
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-orange-500 to-amber-500 transition-all"
+                  style={{ width: `${deviceState?.rj11?.dimLevel || 0}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Spektrum RGB */}
+            {deviceState?.rj11?.spectrum && (
+              <div className="pt-3 border-t border-slate-800 space-y-2">
+                <div className="text-xs text-slate-500 font-bold uppercase mb-2">Spektrum</div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <div className="flex-1 h-1.5 rounded-full bg-slate-950 overflow-hidden">
+                    <div className="h-full bg-red-500" style={{ width: `${deviceState.rj11.spectrum.red}%` }} />
+                  </div>
+                  <span className="text-xs text-red-400 font-mono w-10">{deviceState.rj11.spectrum.red}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <div className="flex-1 h-1.5 rounded-full bg-slate-950 overflow-hidden">
+                    <div className="h-full bg-blue-500" style={{ width: `${deviceState.rj11.spectrum.blue}%` }} />
+                  </div>
+                  <span className="text-xs text-blue-400 font-mono w-10">{deviceState.rj11.spectrum.blue}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-white"></div>
+                  <div className="flex-1 h-1.5 rounded-full bg-slate-950 overflow-hidden">
+                    <div className="h-full bg-white" style={{ width: `${deviceState.rj11.spectrum.white}%` }} />
+                  </div>
+                  <span className="text-xs text-slate-300 font-mono w-10">{deviceState.rj11.spectrum.white}%</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* ESP32 Informationen */}
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 p-6 rounded-2xl shadow-xl">
+        <h3 className="text-white font-bold flex items-center gap-2 mb-6">
+          <Cpu size={18} className="text-blue-500" /> ESP32 System Information
+        </h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800">
+            <div className="text-xs text-slate-500 font-bold uppercase mb-1">Chip Model</div>
+            <div className="text-white font-mono text-sm">ESP32-WROOM-32</div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800">
+            <div className="text-xs text-slate-500 font-bold uppercase mb-1">CPU Freq</div>
+            <div className="text-emerald-400 font-mono text-sm font-bold">240 MHz</div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800">
+            <div className="text-xs text-slate-500 font-bold uppercase mb-1">Free Heap</div>
+            <div className="text-blue-400 font-mono text-sm font-bold">--</div>
+          </div>
+          <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800">
+            <div className="text-xs text-slate-500 font-bold uppercase mb-1">WiFi RSSI</div>
+            <div className="text-purple-400 font-mono text-sm font-bold">--</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

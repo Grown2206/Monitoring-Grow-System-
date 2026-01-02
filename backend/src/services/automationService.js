@@ -1,9 +1,30 @@
 const { sendAlert } = require('./notificationService');
+const VPDConfig = require('../models/VPDConfig');
+const vpdService = require('./vpdService');
+
+// Lazy-load MQTT client to avoid circular dependency
+let mqttClient = null;
+const getMQTTClient = () => {
+  if (!mqttClient) {
+    try {
+      const mqttService = require('./mqttService');
+      mqttClient = mqttService.client;
+    } catch (e) {
+      console.error('⚠️ MQTT Client nicht verfügbar:', e.message);
+    }
+  }
+  return mqttClient;
+};
 
 // --- STATUS SPEICHER ---
 let lastWatering = { 1: 0, 2: 0 };
 let lastLightState = null;      // Damit wir nicht unnötig Befehle senden
 let manualOverrideUntil = 0;    // Timestamp: Bis wann ist Automatik pausiert?
+
+// VPD Control State
+let lastVPDUpdate = 0;          // Timestamp der letzten VPD-Anpassung
+let currentFanSpeed = 50;       // Aktuelle Lüftergeschwindigkeit (0-100)
+let lastVPD = null;             // Letzter VPD-Wert
 
 // --- DYNAMISCHE KONFIGURATION ---
 // Diese Werte können jetzt zur Laufzeit geändert werden (z.B. via App)
@@ -22,11 +43,10 @@ let autoConfig = {
   maxGasSafe: 3500          // Raw Not-Aus
 };
 
-// Helper: VPD Berechnung
+// Helper: VPD Berechnung (Deprecated - use vpdService.calculateVPD instead)
+// Kept for backward compatibility with autoConfig
 const calculateVPD = (temp, humidity) => {
-  if (!temp || !humidity) return 0;
-  const svp = 0.61078 * Math.exp((17.27 * temp) / (temp + 237.3));
-  return svp * (1 - humidity / 100);
+  return vpdService.calculateVPD(temp, humidity);
 };
 
 // --- EXTERNE FUNKTION: MANUELLER EINGRIFF ---
@@ -46,25 +66,25 @@ const updateAutomationConfig = (newConfig) => {
 const getAutomationConfig = () => autoConfig;
 
 // --- HAUPTFUNKTION ---
-const checkAutomationRules = (sensorData, espSocket, broadcast) => {
+const checkAutomationRules = async (sensorData, espSocket, broadcast) => {
   if (!espSocket) return;
 
   // 1. SAFETY CHECK (Priorität 1: Immer aktiv, auch bei manuellem Override!)
   if (checkSafetyRules(sensorData, espSocket, broadcast)) {
-    return; 
+    return;
   }
 
   // 2. MANUELLER OVERRIDE PRÜFEN
   if (Date.now() < manualOverrideUntil) {
     // Optional: Frontend informieren, dass Automatik pausiert ist
-    return; 
+    return;
   }
 
   // 3. LICHT ZEITSTEUERUNG
   checkLightSchedule(espSocket);
 
-  // 4. VPD LÜFTER STEUERUNG
-  checkEnvironmentalControl(sensorData, espSocket);
+  // 4. VPD LÜFTER STEUERUNG (Async - Advanced PID Control)
+  await checkEnvironmentalControl(sensorData, espSocket);
 
   // 5. BEWÄSSERUNG
   checkGroup(1, [sensorData.soil[0], sensorData.soil[1], sensorData.soil[2]], espSocket);
@@ -136,13 +156,172 @@ const checkLightSchedule = (socket) => {
     }
 };
 
-const checkEnvironmentalControl = (data, socket) => {
-  const vpd = calculateVPD(data.temp, data.humidity);
-  
-  if (vpd < autoConfig.vpdMin) {
-      socket.send(JSON.stringify({ command: "FAN_EXHAUST", state: true }));
-  } else if (vpd > autoConfig.vpdMax) {
-      socket.send(JSON.stringify({ command: "FAN_EXHAUST", state: false }));
+const checkEnvironmentalControl = async (data, socket) => {
+  try {
+    // VPD-Config aus DB holen
+    const vpdConfig = await VPDConfig.getOrCreate();
+
+    // Prüfen ob Auto-VPD aktiviert ist
+    if (!vpdConfig.enabled) {
+      // Fallback auf alte einfache Steuerung
+      const vpd = vpdService.calculateVPD(data.temp, data.humidity);
+      if (vpd < autoConfig.vpdMin) {
+        socket.send(JSON.stringify({ command: "FAN_EXHAUST", state: true }));
+      } else if (vpd > autoConfig.vpdMax) {
+        socket.send(JSON.stringify({ command: "FAN_EXHAUST", state: false }));
+      }
+      return;
+    }
+
+    const now = Date.now();
+
+    // Update-Intervall prüfen (Standard: 30 Sekunden)
+    const timeSinceLastUpdate = (now - lastVPDUpdate) / 1000;
+    if (timeSinceLastUpdate < vpdConfig.updateInterval) {
+      return; // Noch nicht Zeit für Update
+    }
+
+    // VPD berechnen
+    const currentVPD = vpdService.calculateVPD(data.temp, data.humidity);
+    if (!currentVPD) {
+      console.log('⚠️ VPD: Keine gültigen Sensordaten');
+      return;
+    }
+
+    // Zielbereich ermitteln
+    const targetRange = vpdConfig.targetRange;
+
+    // Hysterese prüfen - verhindert zu häufige Anpassungen
+    if (vpdConfig.hysteresis.enabled && lastVPD !== null) {
+      const vpdChange = Math.abs(currentVPD - lastVPD);
+      const timeSinceChange = (now - lastVPDUpdate) / 1000;
+
+      if (vpdChange < vpdConfig.hysteresis.threshold &&
+          timeSinceChange < vpdConfig.hysteresis.minTimeBetweenChanges) {
+        return; // Änderung zu gering oder zu früh
+      }
+    }
+
+    // Analyse durchführen
+    const analysis = vpdService.analyzeVPD(currentVPD, targetRange);
+
+    // Notfall-Modi prüfen
+    if (vpdConfig.emergency.enabled) {
+      if (currentVPD < vpdConfig.emergency.criticalLowVPD.threshold) {
+        handleEmergencyVPD('low', currentVPD, vpdConfig);
+        lastVPDUpdate = now;
+        lastVPD = currentVPD;
+        return;
+      }
+      if (currentVPD > vpdConfig.emergency.criticalHighVPD.threshold) {
+        handleEmergencyVPD('high', currentVPD, vpdConfig);
+        lastVPDUpdate = now;
+        lastVPD = currentVPD;
+        return;
+      }
+    }
+
+    // Neue Fan-Geschwindigkeit berechnen (PID-Controller)
+    const newFanSpeed = vpdService.calculateFanSpeed(
+      currentVPD,
+      targetRange,
+      currentFanSpeed,
+      vpdConfig.aggressiveness
+    );
+
+    // Fan-Limits anwenden
+    const limitedFanSpeed = Math.max(
+      vpdConfig.fanLimits.min,
+      Math.min(vpdConfig.fanLimits.max, newFanSpeed)
+    );
+
+    // Nur senden wenn sich Geschwindigkeit geändert hat
+    if (limitedFanSpeed !== currentFanSpeed) {
+      // MQTT-Command an ESP32 senden
+      const client = getMQTTClient();
+      if (client) {
+        client.publish('grow_drexl_v2/command', JSON.stringify({
+          action: 'set_fan_pwm',
+          value: limitedFanSpeed
+        }));
+      }
+
+      console.log(`🌡️ VPD: ${currentVPD.toFixed(2)} kPa (${analysis.status}) → Fan: ${currentFanSpeed}% → ${limitedFanSpeed}%`);
+
+      // Statistiken aktualisieren
+      vpdConfig.updateStatistics(currentVPD, analysis.inRange);
+      vpdConfig.logAction(currentVPD, limitedFanSpeed, `${analysis.status}: ${analysis.recommendation}`);
+
+      // Logging
+      if (vpdConfig.logging.enabled && vpdConfig.logging.logChanges) {
+        console.log(`📊 VPD-Anpassung: VPD=${currentVPD.toFixed(2)} kPa, Fan=${limitedFanSpeed}%, Status=${analysis.status}`);
+      }
+
+      // Speichern
+      await vpdConfig.save();
+
+      currentFanSpeed = limitedFanSpeed;
+    }
+
+    lastVPDUpdate = now;
+    lastVPD = currentVPD;
+
+  } catch (error) {
+    console.error('❌ VPD Control Error:', error);
+  }
+};
+
+// Notfall-Handler für kritische VPD-Werte
+const handleEmergencyVPD = (type, vpd, config) => {
+  const emergency = type === 'low'
+    ? config.emergency.criticalLowVPD
+    : config.emergency.criticalHighVPD;
+
+  console.log(`🚨 VPD EMERGENCY: ${type.toUpperCase()} - ${vpd.toFixed(2)} kPa`);
+
+  const client = getMQTTClient();
+
+  switch (emergency.action) {
+    case 'min_fan':
+      currentFanSpeed = config.fanLimits.min;
+      if (client) {
+        client.publish('grow_drexl_v2/command', JSON.stringify({
+          action: 'set_fan_pwm',
+          value: config.fanLimits.min
+        }));
+      }
+      console.log(`🔧 Emergency: Fan auf Minimum (${config.fanLimits.min}%)`);
+      break;
+
+    case 'max_fan':
+      currentFanSpeed = config.fanLimits.max;
+      if (client) {
+        client.publish('grow_drexl_v2/command', JSON.stringify({
+          action: 'set_fan_pwm',
+          value: config.fanLimits.max
+        }));
+      }
+      console.log(`🔧 Emergency: Fan auf Maximum (${config.fanLimits.max}%)`);
+      break;
+
+    case 'disable':
+      config.enabled = false;
+      config.save();
+      console.log('🔧 Emergency: Auto-VPD deaktiviert');
+      break;
+
+    case 'alert_only':
+      console.log('🔧 Emergency: Nur Alert, keine Aktion');
+      break;
+  }
+
+  // Benachrichtigung senden
+  if (config.notifications.enabled && config.notifications.onCritical) {
+    sendAlert(
+      `🚨 Kritisches VPD: ${type === 'low' ? 'Zu niedrig' : 'Zu hoch'}`,
+      `VPD: **${vpd.toFixed(2)} kPa**\nAktion: ${emergency.action}`,
+      type === 'low' ? 0xFFA500 : 0xFF0000
+    );
   }
 };
 

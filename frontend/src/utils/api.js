@@ -191,3 +191,39 @@ export const calendarAPI = {
 export const aiAPI = {
   consult: (message) => api.post('/ai/consult', { message })
 };
+
+export const nutrientsAPI = {
+  // Schedules
+  getSchedules: () => api.get('/nutrients/schedules'),
+  getSchedule: (id) => api.get(`/nutrients/schedules/${id}`),
+  createSchedule: (data) => api.post('/nutrients/schedules', data),
+  updateSchedule: (id, data) => api.put(`/nutrients/schedules/${id}`, data),
+  deleteSchedule: (id) => api.delete(`/nutrients/schedules/${id}`),
+  toggleSchedule: (id) => api.post(`/nutrients/schedules/${id}/toggle`),
+
+  // Dosierung
+  manualDose: (waterVolume_liters, ml_per_liter, notes) =>
+    api.post('/nutrients/dose', { waterVolume_liters, ml_per_liter, notes }),
+
+  // Reservoir
+  getReservoir: () => api.get('/nutrients/reservoir'),
+  refillReservoir: (pumpId, volume_ml) =>
+    api.put('/nutrients/reservoir/refill', { pumpId, volume_ml }),
+  waterChange: () => api.put('/nutrients/reservoir/water-change'),
+
+  // Logs & Stats
+  getLogs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return api.get(`/nutrients/logs${query ? `?${query}` : ''}`);
+  },
+  getStats: (startDate, endDate) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
+    return api.get(`/nutrients/stats?${params.toString()}`);
+  },
+
+  // Kalibrierung
+  calibrateSensor: (sensor, referenceValue, measuredValue) =>
+    api.post('/nutrients/calibrate', { sensor, referenceValue, measuredValue })
+};

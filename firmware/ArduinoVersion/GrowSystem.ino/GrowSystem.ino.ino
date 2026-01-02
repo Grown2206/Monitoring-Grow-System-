@@ -29,6 +29,11 @@ const char* MQTT_TOPIC_DATA = "grow_drexl_v2/data";
 const char* MQTT_TOPIC_CONFIG = "grow_drexl_v2/config";
 const char* MQTT_TOPIC_COMMAND = "grow_drexl_v2/command";
 
+// NÄHRSTOFF-TOPICS
+const char* MQTT_TOPIC_NUTRIENT_CMD = "grow/esp32/nutrients/command";
+const char* MQTT_TOPIC_NUTRIENT_STATUS = "grow/esp32/nutrients/status";
+const char* MQTT_TOPIC_NUTRIENT_SENSORS = "grow/esp32/nutrients/sensors";
+
 // ==========================================
 // 2. PIN DEFINITIONEN
 // ==========================================
@@ -48,7 +53,11 @@ const int PINS_SOIL_MOISTURE[6] = { 36, 39, 34, 35, 32, 33 };
 
 // RJ11 Grow Light Pins
 #define PIN_RJ11_PWM 23      // PWM Dimming
-#define PIN_RJ11_ENABLE 27   // Enable/Disable 
+#define PIN_RJ11_ENABLE 27   // Enable/Disable
+
+// Nährstoff-Pumpe (neu hinzugefügt)
+#define PIN_NUTRIENT_PUMP 21     // Relais für Nährstoff-Pumpe
+#define PIN_LEVEL_SENSOR 22      // Analog-Füllstands-Sensor (optional) 
 
 // ==========================================
 // 3. OBJEKTE & GLOBALE VARIABLEN
@@ -76,6 +85,18 @@ int lightPWMValue = 0;
 volatile unsigned long fanTachPulses = 0;
 unsigned long lastTachCheck = 0;
 int fanRPM = 0;
+
+// Nährstoff-Pumpen-Variablen
+bool nutrientPumpRunning = false;
+unsigned long nutrientPumpStartTime = 0;
+unsigned long nutrientPumpDuration = 0;
+float totalDosed_ml = 0;
+#define DEFAULT_FLOW_RATE 100    // ml/min (muss kalibriert werden!)
+
+// Sensor-Werte (simuliert wenn keine Sensoren vorhanden)
+float currentEC = 0.0;
+float currentPH = 0.0;
+int reservoirLevel_percent = 100;
 
 // ==========================================
 // 4. FUNKTIONEN
@@ -131,6 +152,116 @@ void updateFanRPM() {
   }
 }
 
+// ==========================================
+// NÄHRSTOFF-PUMPEN FUNKTIONEN
+// ==========================================
+
+// Sensoren lesen (simuliert - später durch echte Sensoren ersetzen)
+void readNutrientSensors() {
+  // Füllstands-Sensor (Analog 0-4095)
+  int levelRaw = analogRead(PIN_LEVEL_SENSOR);
+  reservoirLevel_percent = map(levelRaw, 0, 4095, 0, 100);
+
+  // EC/pH simuliert (später: Atlas Scientific Integration)
+  currentEC = 1.2 + random(-10, 10) / 100.0;
+  currentPH = 6.0 + random(-5, 5) / 100.0;
+}
+
+// Nährstoff-Pumpe starten
+void startNutrientPump() {
+  digitalWrite(PIN_NUTRIENT_PUMP, HIGH);
+  nutrientPumpRunning = true;
+  nutrientPumpStartTime = millis();
+
+  Serial.println("▶ Nährstoff-Pumpe GESTARTET");
+
+  // Status publishen
+  JsonDocument doc;
+  doc["status"] = "dosing";
+  doc["pumpRunning"] = true;
+  doc["timestamp"] = millis();
+
+  char buffer[256];
+  serializeJson(doc, buffer);
+  client.publish(MQTT_TOPIC_NUTRIENT_STATUS, buffer);
+}
+
+// Nährstoff-Pumpe stoppen
+void stopNutrientPump() {
+  digitalWrite(PIN_NUTRIENT_PUMP, LOW);
+  nutrientPumpRunning = false;
+
+  unsigned long elapsed = millis() - nutrientPumpStartTime;
+  float dosed_ml = (elapsed / 1000.0 / 60.0) * DEFAULT_FLOW_RATE;
+  totalDosed_ml += dosed_ml;
+
+  Serial.printf("■ Nährstoff-Pumpe GESTOPPT (%.1f ml dosiert)\n", dosed_ml);
+
+  // Status publishen
+  JsonDocument doc;
+  doc["status"] = "idle";
+  doc["pumpRunning"] = false;
+  doc["timestamp"] = millis();
+
+  char buffer[256];
+  serializeJson(doc, buffer);
+  client.publish(MQTT_TOPIC_NUTRIENT_STATUS, buffer);
+}
+
+// Dosierungs-Command verarbeiten
+void handleNutrientDoseCommand(JsonDocument& doc) {
+  Serial.println("=== Nährstoff-Dosierungs-Command empfangen ===");
+
+  // Sicherheits-Check: Pumpe läuft bereits?
+  if (nutrientPumpRunning) {
+    Serial.println("✗ Pumpe läuft bereits!");
+    JsonDocument errorDoc;
+    errorDoc["status"] = "error";
+    errorDoc["error"] = "Pump already running";
+    char buffer[256];
+    serializeJson(errorDoc, buffer);
+    client.publish(MQTT_TOPIC_NUTRIENT_STATUS, buffer);
+    return;
+  }
+
+  // Parameter extrahieren
+  JsonArray dosageArray = doc["dosage"];
+  if (dosageArray.size() == 0) {
+    Serial.println("✗ Keine Dosierungs-Daten!");
+    return;
+  }
+
+  JsonObject firstDosage = dosageArray[0];
+  float volume_ml = firstDosage["volume_ml"] | 0;
+  int flowRate = firstDosage["flowRate_ml_per_min"] | DEFAULT_FLOW_RATE;
+  bool measureAfter = doc["measureAfter"] | false;
+
+  Serial.printf("Volumen: %.1f ml, Flow-Rate: %d ml/min\n", volume_ml, flowRate);
+
+  // Validierung
+  if (volume_ml <= 0 || volume_ml > 1000) {
+    Serial.println("✗ Ungültiges Volumen!");
+    return;
+  }
+
+  // Sensor-Werte VOR Dosierung messen
+  readNutrientSensors();
+  float ecBefore = currentEC;
+  float phBefore = currentPH;
+
+  // Dauer berechnen
+  float duration_seconds = (volume_ml / (float)flowRate) * 60.0;
+  nutrientPumpDuration = (unsigned long)(duration_seconds * 1000);
+
+  Serial.printf("Berechnete Dauer: %.1f Sekunden\n", duration_seconds);
+
+  // Pumpe starten
+  startNutrientPump();
+
+  // Warten bis fertig (non-blocking über loop)
+  // Die loop() prüft ob nutrientPumpDuration abgelaufen ist
+}
+
 void setup_wifi() {
   delay(10);
   Serial.println();
@@ -156,6 +287,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   DeserializationError error = deserializeJson(doc, message);
 
   if (!error) {
+    // Haupt-System Commands
     if (String(topic) == MQTT_TOPIC_COMMAND) {
       const char* action = doc["action"];
       if (action) {
@@ -196,6 +328,36 @@ void callback(char* topic, byte* payload, unsigned int length) {
         }
       }
     }
+
+    // Nährstoff-Pumpen Commands
+    else if (String(topic) == MQTT_TOPIC_NUTRIENT_CMD) {
+      const char* action = doc["action"];
+      if (action) {
+        if (strcmp(action, "dose") == 0) {
+          handleNutrientDoseCommand(doc);
+        }
+        else if (strcmp(action, "stop") == 0) {
+          if (nutrientPumpRunning) {
+            stopNutrientPump();
+          }
+        }
+        else if (strcmp(action, "measure") == 0) {
+          readNutrientSensors();
+          // Sensor-Daten publishen
+          JsonDocument sensorDoc;
+          sensorDoc["ec"] = currentEC;
+          sensorDoc["ph"] = currentPH;
+          sensorDoc["temp"] = sht31.readTemperature();  // Nutze vorhandenen SHT31 Temp-Sensor
+          sensorDoc["reservoirLevel_percent"] = reservoirLevel_percent;
+          sensorDoc["totalDosed_ml"] = totalDosed_ml;
+
+          char buffer[512];
+          serializeJson(sensorDoc, buffer);
+          client.publish(MQTT_TOPIC_NUTRIENT_SENSORS, buffer);
+          Serial.println("Nährstoff-Sensordaten gesendet");
+        }
+      }
+    }
   }
 }
 
@@ -208,6 +370,8 @@ void reconnect() {
       Serial.println("verbunden!");
       client.subscribe(MQTT_TOPIC_CONFIG);
       client.subscribe(MQTT_TOPIC_COMMAND);
+      client.subscribe(MQTT_TOPIC_NUTRIENT_CMD);  // Nährstoff-Commands
+      Serial.println("Subscribed: Haupt-System + Nährstoffe");
     } else {
       Serial.print("Fehler, rc="); Serial.print(client.state());
       Serial.println(" warte 5s...");
@@ -232,6 +396,11 @@ void setup() {
   pinMode(PIN_PUMP_2, OUTPUT);
   pinMode(PIN_LIGHT, OUTPUT);
   pinMode(PIN_FAN, OUTPUT);
+
+  // Nährstoff-Pumpe (neu)
+  pinMode(PIN_NUTRIENT_PUMP, OUTPUT);
+  digitalWrite(PIN_NUTRIENT_PUMP, LOW);  // Pumpe aus
+  pinMode(PIN_LEVEL_SENSOR, INPUT);      // Füllstands-Sensor
 
   // === PWM SETUP (FIXED FOR ESP32 CORE 3.0) ===
   
@@ -275,6 +444,48 @@ void loop() {
 
   // RPM kontinuierlich berechnen
   updateFanRPM();
+
+  // Nährstoff-Pumpen-Timer prüfen
+  if (nutrientPumpRunning) {
+    unsigned long elapsed = millis() - nutrientPumpStartTime;
+
+    if (elapsed >= nutrientPumpDuration) {
+      stopNutrientPump();
+
+      // Nach Dosierung: Sensoren messen & Completion-Response senden
+      delay(5000);  // 5 Sek warten bis Werte stabil
+      readNutrientSensors();
+
+      JsonDocument response;
+      response["status"] = "completed";
+      response["volume_ml"] = (nutrientPumpDuration / 1000.0 / 60.0) * DEFAULT_FLOW_RATE;
+      response["duration_seconds"] = nutrientPumpDuration / 1000.0;
+      response["ec"] = currentEC;
+      response["ph"] = currentPH;
+      response["temp"] = sht31.readTemperature();
+
+      char buffer[512];
+      serializeJson(response, buffer);
+      client.publish(MQTT_TOPIC_NUTRIENT_STATUS, buffer);
+
+      Serial.println("=== Dosierung abgeschlossen ===");
+    }
+
+    // Progress alle 500ms publishen
+    static unsigned long lastProgress = 0;
+    if (millis() - lastProgress > 500) {
+      JsonDocument progressDoc;
+      progressDoc["status"] = "dosing";
+      progressDoc["progress_percent"] = (int)((elapsed / (float)nutrientPumpDuration) * 100);
+      progressDoc["elapsed_ms"] = elapsed;
+
+      char buffer[256];
+      serializeJson(progressDoc, buffer);
+      client.publish(MQTT_TOPIC_NUTRIENT_STATUS, buffer);
+
+      lastProgress = millis();
+    }
+  }
 
   unsigned long now = millis();
   if (now - lastMsg > MSG_INTERVAL) {
