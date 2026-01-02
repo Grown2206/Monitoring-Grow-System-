@@ -36,13 +36,22 @@ const int PINS_SOIL_MOISTURE[6] = { 36, 39, 34, 35, 32, 33 };
 #define PIN_TANK_LEVEL 25
 #define PIN_GAS_SENSOR 26
 
+// Relais Pins (ON/OFF)
 #define PIN_PUMP_1 16
 #define PIN_PUMP_2 17
-#define PIN_LIGHT 4 
-#define PIN_FAN 5 
+#define PIN_LIGHT 4
+#define PIN_FAN 5
+
+// PWM Pins (Erweiterte Steuerung)
+#define PIN_FAN_PWM 18       // PWM für Abluftfilter (zu 0-10V Converter)
+#define PIN_FAN_TACH 19      // Tachometer Input (FG Signal)
+
+// RJ11 Grow Light Pins
+#define PIN_RJ11_PWM 23      // PWM Dimming
+#define PIN_RJ11_ENABLE 27   // Enable/Disable 
 
 // ==========================================
-// 3. OBJEKTE
+// 3. OBJEKTE & GLOBALE VARIABLEN
 // ==========================================
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -50,11 +59,72 @@ Adafruit_SHT31 sht31 = Adafruit_SHT31();
 BH1750 lightMeter;
 
 unsigned long lastMsg = 0;
-#define MSG_INTERVAL 5000 
+#define MSG_INTERVAL 5000
+
+// PWM Konfiguration
+#define PWM_FREQ 25000        // 25 kHz PWM Frequenz
+#define PWM_RESOLUTION 8      // 8-bit (0-255)
+
+// PWM Kanäle (ESP32 hat 16 PWM Kanäle)
+#define PWM_CHANNEL_FAN 0
+#define PWM_CHANNEL_LIGHT 1
+
+// Aktuelle PWM Werte (0-100%)
+int fanPWMValue = 0;
+int lightPWMValue = 0;
+
+// Tachometer
+volatile unsigned long fanTachPulses = 0;
+unsigned long lastTachCheck = 0;
+int fanRPM = 0; 
 
 // ==========================================
 // 4. FUNKTIONEN
 // ==========================================
+
+// Tachometer Interrupt Handler
+void IRAM_ATTR tachISR() {
+  fanTachPulses++;
+}
+
+// PWM Wert setzen (0-100%)
+void setFanPWM(int percent) {
+  fanPWMValue = constrain(percent, 0, 100);
+  int dutyCycle = map(fanPWMValue, 0, 100, 0, 255);
+  ledcWrite(PWM_CHANNEL_FAN, dutyCycle);
+  Serial.print("Fan PWM gesetzt: ");
+  Serial.print(fanPWMValue);
+  Serial.println("%");
+}
+
+// RJ11 Light PWM setzen (0-100%)
+void setLightPWM(int percent) {
+  lightPWMValue = constrain(percent, 0, 100);
+  int dutyCycle = map(lightPWMValue, 0, 100, 0, 255);
+  ledcWrite(PWM_CHANNEL_LIGHT, dutyCycle);
+  Serial.print("Light PWM gesetzt: ");
+  Serial.print(lightPWMValue);
+  Serial.println("%");
+}
+
+// RJ11 Light Enable/Disable
+void setLightEnable(bool enabled) {
+  digitalWrite(PIN_RJ11_ENABLE, enabled ? HIGH : LOW);
+  Serial.print("RJ11 Light: ");
+  Serial.println(enabled ? "ENABLED" : "DISABLED");
+}
+
+// RPM aus Tachometer berechnen
+void updateFanRPM() {
+  unsigned long now = millis();
+  if (now - lastTachCheck >= 1000) { // Jede Sekunde
+    // Annahme: 2 Pulse pro Umdrehung (typisch für PC-Lüfter)
+    fanRPM = (fanTachPulses * 60) / 2;
+    fanTachPulses = 0;
+    lastTachCheck = now;
+  }
+}
+
 void setup_wifi() {
   delay(10);
   Serial.println();
@@ -91,9 +161,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
         else if (strcmp(action, "set_relay") == 0) {
           const char* relay = doc["relay"];
           bool state = doc["state"];
-          
+
           int pinToSwitch = -1;
-          
+
           if (strcmp(relay, "light") == 0) pinToSwitch = PIN_LIGHT;
           else if (strcmp(relay, "fan_exhaust") == 0) pinToSwitch = PIN_FAN;
           else if (strcmp(relay, "pump_main") == 0) pinToSwitch = PIN_PUMP_1;
@@ -106,6 +176,18 @@ void callback(char* topic, byte* payload, unsigned int length) {
             Serial.print(" -> ");
             Serial.println(state ? "AN" : "AUS");
           }
+        }
+        else if (strcmp(action, "set_fan_pwm") == 0) {
+          int pwmValue = doc["value"];
+          setFanPWM(pwmValue);
+        }
+        else if (strcmp(action, "set_light_pwm") == 0) {
+          int pwmValue = doc["value"];
+          setLightPWM(pwmValue);
+        }
+        else if (strcmp(action, "set_light_enable") == 0) {
+          bool enabled = doc["enabled"];
+          setLightEnable(enabled);
         }
       }
     }
@@ -134,27 +216,52 @@ void reconnect() {
 // ==========================================
 void setup() {
   Serial.begin(115200);
-  
+
+  // Analog Inputs
   for(int i=0; i<6; i++) pinMode(PINS_SOIL_MOISTURE[i], INPUT);
   pinMode(PIN_TANK_LEVEL, INPUT);
   pinMode(PIN_GAS_SENSOR, INPUT);
-  
+
+  // Relais Outputs (ON/OFF)
   pinMode(PIN_PUMP_1, OUTPUT);
   pinMode(PIN_PUMP_2, OUTPUT);
   pinMode(PIN_LIGHT, OUTPUT);
   pinMode(PIN_FAN, OUTPUT);
 
+  // PWM Setup
+  ledcSetup(PWM_CHANNEL_FAN, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(PIN_FAN_PWM, PWM_CHANNEL_FAN);
+  ledcWrite(PWM_CHANNEL_FAN, 0); // Start bei 0%
+
+  ledcSetup(PWM_CHANNEL_LIGHT, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(PIN_RJ11_PWM, PWM_CHANNEL_LIGHT);
+  ledcWrite(PWM_CHANNEL_LIGHT, 0); // Start bei 0%
+
+  // RJ11 Enable Pin
+  pinMode(PIN_RJ11_ENABLE, OUTPUT);
+  digitalWrite(PIN_RJ11_ENABLE, LOW); // Start disabled
+
+  // Tachometer Interrupt
+  pinMode(PIN_FAN_TACH, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(PIN_FAN_TACH), tachISR, FALLING);
+
+  // Sensoren
   if (!sht31.begin(0x44)) Serial.println("SHT31 Fehler");
   if (!lightMeter.begin(BH1750::CONTINUOUS_HIGH_RES_MODE)) Serial.println("BH1750 Fehler");
 
   setup_wifi();
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
+
+  Serial.println("✅ PWM & RJ11 Steuerung initialisiert");
 }
 
 void loop() {
   if (!client.connected()) reconnect();
   client.loop();
+
+  // RPM kontinuierlich berechnen
+  updateFanRPM();
 
   unsigned long now = millis();
   if (now - lastMsg > MSG_INTERVAL) {
@@ -162,10 +269,10 @@ void loop() {
 
     // ArduinoJson v7 Syntax
     JsonDocument doc;
-    
+
     float t = sht31.readTemperature();
     float h = sht31.readHumidity();
-    
+
     doc["temp"] = isnan(t) ? 0.0 : t;
     doc["humidity"] = isnan(h) ? 0.0 : h;
     doc["lux"] = lightMeter.readLightLevel();
@@ -177,9 +284,14 @@ void loop() {
       soil.add(analogRead(PINS_SOIL_MOISTURE[i]));
     }
 
+    // PWM & RPM Daten hinzufügen
+    doc["fanPWM"] = fanPWMValue;
+    doc["lightPWM"] = lightPWMValue;
+    doc["fanRPM"] = fanRPM;
+
     char buffer[1024];
     serializeJson(doc, buffer);
-    
+
     if(client.publish(MQTT_TOPIC_DATA, buffer)) {
       Serial.print("Daten gesendet an: ");
       Serial.println(MQTT_TOPIC_DATA);

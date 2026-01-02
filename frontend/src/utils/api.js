@@ -158,6 +158,10 @@ export const analyticsAPI = {
 
 export const controlsAPI = {
   setRelay: (relay, state) => api.post('/controls/relay', { relay, state }),
+  setFanPWM: (value) => api.post('/controls/fan-pwm', { value }),
+  setLightPWM: (value) => api.post('/controls/light-pwm', { value }),
+  setLightEnable: (enabled) => api.post('/controls/light-enable', { enabled }),
+  getDeviceState: () => api.get('/controls/device-state'),
   rebootSystem: () => api.post('/system/reboot'),
   resetSystem: () => api.post('/system/reset')
 };
