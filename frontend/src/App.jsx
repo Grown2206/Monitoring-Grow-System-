@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './theme';
 import Dashboard from './components/Dashboard';
 import Plants from './components/Plants';
 import Controls from './components/Controls';
@@ -220,10 +221,12 @@ function AppContent() {
 // Wrapper mit Providern
 export default function App() {
   return (
-    <AuthProvider>
-      <AlertProvider>
-        <AppContent />
-      </AlertProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AlertProvider>
+          <AppContent />
+        </AlertProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
