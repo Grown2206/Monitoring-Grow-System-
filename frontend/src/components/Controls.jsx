@@ -13,13 +13,33 @@ import {
 import { useAlert } from '../context/AlertContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
+// ==================== SAFETY COLORS FIX ====================
+const FALLBACK_COLORS = {
+  emerald: { 400: '#34d399', 500: '#10b981', 600: '#059669' },
+  red: { 200: '#fecaca', 300: '#fca5a5', 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
+  amber: { 400: '#fbbf24', 500: '#f59e0b' },
+  yellow: { 400: '#facc15', 500: '#eab308' },
+  blue: { 400: '#60a5fa', 500: '#3b82f6' },
+  purple: { 300: '#d8b4fe', 400: '#c084fc', 500: '#a855f7' },
+  cyan: { 400: '#22d3ee' },
+  orange: { 400: '#fb923c' },
+  slate: { 500: '#64748b' },
+};
+
+// Hilfsfunktion für sicheren Farbzugriff
+const getSafeColor = (colorName, weight) => {
+  return importedColors?.[colorName]?.[weight] || FALLBACK_COLORS?.[colorName]?.[weight] || '#888888';
+};
+// ===========================================================
+
+
 // ==================== KOMPONENTEN ====================
 
 // Activity Log Item
 const LogItem = ({ timestamp, message, type, theme }) => (
   <div className="flex items-start gap-3 py-2 border-b last:border-0 text-sm" style={{ borderColor: `${theme.border.default}50` }}>
     <span className="font-mono text-xs mt-0.5" style={{ color: theme.text.muted }}>{timestamp}</span>
-    <span className="font-medium" style={{ color: type === 'error' ? colors.red[400] : theme.text.secondary }}>{message}</span>
+    <span className="font-medium" style={{ color: type === 'error' ? getSafeColor('red', 400) : theme.text.secondary }}>{message}</span>
   </div>
 );
 
@@ -63,7 +83,7 @@ const DeviceCard = ({
           disabled={disabled}
           className="relative w-12 h-7 rounded-full transition-colors duration-300 focus:outline-none"
           style={{
-            backgroundColor: isOn ? colors.emerald[600] : theme.bg.hover,
+            backgroundColor: isOn ? getSafeColor('emerald', 600) : theme.bg.hover,
             cursor: disabled ? 'not-allowed' : 'pointer'
           }}
         >
@@ -112,7 +132,7 @@ const DeviceCard = ({
         <div className="flex items-center gap-1">
           <div
             className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: health > 80 ? colors.emerald[500] : health > 50 ? colors.amber[500] : colors.red[500] }}
+            style={{ backgroundColor: health > 80 ? getSafeColor('emerald', 500) : health > 50 ? getSafeColor('amber', 500) : getSafeColor('red', 500) }}
           />
           <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
             {health}%
@@ -163,7 +183,7 @@ const ScheduleEntry = ({ time, action, enabled, onToggle, theme }) => (
     <button
       onClick={onToggle}
       className="w-10 h-6 rounded-full transition-colors"
-      style={{ backgroundColor: enabled ? colors.emerald[600] : theme.bg.hover }}
+      style={{ backgroundColor: enabled ? getSafeColor('emerald', 600) : theme.bg.hover }}
     >
       <span
         className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1"
@@ -180,8 +200,8 @@ const PowerChart = ({ data, theme }) => (
       <AreaChart data={data}>
         <defs>
           <linearGradient id="powerGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={colors.yellow[400]} stopOpacity={0.3} />
-            <stop offset="95%" stopColor={colors.yellow[400]} stopOpacity={0} />
+            <stop offset="5%" stopColor={getSafeColor('yellow', 400)} stopOpacity={0.3} />
+            <stop offset="95%" stopColor={getSafeColor('yellow', 400)} stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} opacity={0.3} />
@@ -195,7 +215,7 @@ const PowerChart = ({ data, theme }) => (
           }}
           itemStyle={{ color: theme.text.primary }}
         />
-        <Area type="monotone" dataKey="watts" stroke={colors.yellow[400]} fill="url(#powerGrad)" strokeWidth={2} />
+        <Area type="monotone" dataKey="watts" stroke={getSafeColor('yellow', 400)} fill="url(#powerGrad)" strokeWidth={2} />
       </AreaChart>
     </ResponsiveContainer>
   </div>
@@ -631,7 +651,7 @@ export default function Controls() {
         >
           <div className="z-10">
             <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
-              {isDay ? <Sun size={16} style={{ color: colors.yellow[400] }} /> : <Moon size={16} style={{ color: colors.blue[400] }} />}
+              {isDay ? <Sun size={16} style={{ color: getSafeColor('yellow', 400) }} /> : <Moon size={16} style={{ color: getSafeColor('blue', 400) }} />}
               Aktueller Zyklus
             </div>
             <div className="text-2xl font-bold" style={{ color: theme.text.primary }}>
@@ -642,7 +662,7 @@ export default function Controls() {
                 className="h-full rounded-full transition-all"
                 style={{
                   width: `${(cycleInfo.current / 24) * 100}%`,
-                  backgroundColor: isDay ? colors.yellow[400] : colors.blue[500]
+                  backgroundColor: isDay ? getSafeColor('yellow', 400) : getSafeColor('blue', 500)
                 }}
               />
             </div>
@@ -650,7 +670,7 @@ export default function Controls() {
           <div
             className="absolute right-0 top-0 w-32 h-full opacity-10 pointer-events-none"
             style={{
-              background: `linear-gradient(to left, ${isDay ? colors.yellow[500] : colors.blue[500]}, transparent)`
+              background: `linear-gradient(to left, ${isDay ? getSafeColor('yellow', 500) : getSafeColor('blue', 500)}, transparent)`
             }}
           />
         </div>
@@ -658,10 +678,10 @@ export default function Controls() {
         {/* Power Monitor */}
         <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
           <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
-            <Lightning size={16} style={{ color: colors.yellow[500] }} />
+            <Lightning size={16} style={{ color: getSafeColor('yellow', 500) }} />
             Live Power
           </div>
-          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: colors.yellow[400] }}>
+          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: getSafeColor('yellow', 400) }}>
             {totalWatts} <span className="text-sm" style={{ color: theme.text.muted }}>W</span>
           </div>
           <div className="text-xs mt-1" style={{ color: theme.text.muted }}>
@@ -672,14 +692,14 @@ export default function Controls() {
         {/* System Health */}
         <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
           <div className="flex items-center gap-2 text-sm mb-1 font-bold uppercase tracking-wider" style={{ color: theme.text.muted }}>
-            <Activity size={16} style={{ color: colors.emerald[500] }} />
+            <Activity size={16} style={{ color: getSafeColor('emerald', 500) }} />
             System Health
           </div>
-          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: colors.emerald[400] }}>
+          <div className="text-3xl font-mono font-bold flex items-center gap-2" style={{ color: getSafeColor('emerald', 400) }}>
             {systemHealth.toFixed(0)} <span className="text-sm" style={{ color: theme.text.muted }}>%</span>
           </div>
           <div className="flex items-center gap-1 mt-1">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'animate-pulse' : ''}`} style={{ backgroundColor: isConnected ? colors.emerald[500] : colors.red[500] }} />
+            <div className={`w-2 h-2 rounded-full ${isConnected ? 'animate-pulse' : ''}`} style={{ backgroundColor: isConnected ? getSafeColor('emerald', 500) : getSafeColor('red', 500) }} />
             <span className="text-xs" style={{ color: theme.text.muted }}>
               {isConnected ? 'Online' : 'Offline'}
             </span>
@@ -688,7 +708,7 @@ export default function Controls() {
       </div>
 
       {!isConnected && (
-        <div className="border p-4 rounded-xl flex items-center gap-3 animate-pulse" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: colors.red[200] }}>
+        <div className="border p-4 rounded-xl flex items-center gap-3 animate-pulse" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: getSafeColor('red', 200) }}>
           <AlertTriangle />
           <span className="font-bold text-sm">System offline. Befehle werden nicht ausgeführt!</span>
         </div>
@@ -707,10 +727,10 @@ export default function Controls() {
           )}
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <SceneCard icon={Leaf} title="Vegetativ" description="18h Licht, 80% Dim" isActive={activeScene === 'veg'} onClick={() => activateScene('veg')} theme={theme} color={colors.emerald[500]} />
-          <SceneCard icon={Flame} title="Blüte" description="12h Licht, 100% Dim" isActive={activeScene === 'bloom'} onClick={() => activateScene('bloom')} theme={theme} color={colors.purple[500]} />
-          <SceneCard icon={Wind} title="Trocknung" description="Nur Ventilation" isActive={activeScene === 'dry'} onClick={() => activateScene('dry')} theme={theme} color={colors.amber[500]} />
-          <SceneCard icon={Wrench} title="Wartung" description="Arbeitslicht 50%" isActive={activeScene === 'maintenance'} onClick={() => activateScene('maintenance')} theme={theme} color={colors.blue[500]} />
+          <SceneCard icon={Leaf} title="Vegetativ" description="18h Licht, 80% Dim" isActive={activeScene === 'veg'} onClick={() => activateScene('veg')} theme={theme} color={getSafeColor('emerald', 500)} />
+          <SceneCard icon={Flame} title="Blüte" description="12h Licht, 100% Dim" isActive={activeScene === 'bloom'} onClick={() => activateScene('bloom')} theme={theme} color={getSafeColor('purple', 500)} />
+          <SceneCard icon={Wind} title="Trocknung" description="Nur Ventilation" isActive={activeScene === 'dry'} onClick={() => activateScene('dry')} theme={theme} color={getSafeColor('amber', 500)} />
+          <SceneCard icon={Wrench} title="Wartung" description="Arbeitslicht 50%" isActive={activeScene === 'maintenance'} onClick={() => activateScene('maintenance')} theme={theme} color={getSafeColor('blue', 500)} />
         </div>
       </div>
 
@@ -733,7 +753,7 @@ export default function Controls() {
           {/* Safety Lock */}
           <div className="flex items-center justify-between p-4 rounded-xl border" style={{ backgroundColor: safetyLocked ? theme.bg.card : 'rgba(239, 68, 68, 0.1)', borderColor: safetyLocked ? theme.border.default : 'rgba(239, 68, 68, 0.3)' }}>
             <div className="flex items-center gap-3">
-              {safetyLocked ? <Lock size={24} style={{ color: colors.emerald[400] }} /> : <Unlock size={24} className="animate-pulse" style={{ color: colors.red[400] }} />}
+              {safetyLocked ? <Lock size={24} style={{ color: getSafeColor('emerald', 400) }} /> : <Unlock size={24} className="animate-pulse" style={{ color: getSafeColor('red', 400) }} />}
               <div>
                 <h3 className="font-bold" style={{ color: theme.text.primary }}>{safetyLocked ? 'Steuerung Gesichert' : 'Manuelle Kontrolle Aktiv'}</h3>
                 <p className="text-xs" style={{ color: theme.text.muted }}>
@@ -745,7 +765,7 @@ export default function Controls() {
               onClick={() => setSafetyLocked(!safetyLocked)}
               className="px-4 py-2 rounded-lg text-sm font-bold border transition-colors"
               style={{
-                backgroundColor: safetyLocked ? theme.bg.hover : colors.red[600],
+                backgroundColor: safetyLocked ? theme.bg.hover : getSafeColor('red', 600),
                 borderColor: safetyLocked ? theme.border.default : 'transparent',
                 color: safetyLocked ? theme.text.secondary : '#ffffff'
               }}
@@ -761,7 +781,7 @@ export default function Controls() {
               label="Hauptlicht"
               subLabel="Samsung LM301H LED"
               icon={Lightbulb}
-              iconColor={colors.yellow[400]}
+              iconColor={getSafeColor('yellow', 400)}
               iconBg="rgba(250, 204, 21, 0.1)"
               watts={200}
               runtime={devices.light.runtime}
@@ -779,7 +799,7 @@ export default function Controls() {
               label="Abluft"
               subLabel="AC Infinity CloudLine"
               icon={Fan}
-              iconColor={colors.blue[400]}
+              iconColor={getSafeColor('blue', 400)}
               iconBg="rgba(96, 165, 250, 0.1)"
               watts={35}
               runtime={devices.fan_exhaust.runtime}
@@ -794,7 +814,7 @@ export default function Controls() {
               label="Umluft"
               subLabel="Clip-On Ventilator"
               icon={Wind}
-              iconColor={colors.cyan[400]}
+              iconColor={getSafeColor('cyan', 400)}
               iconBg="rgba(34, 211, 238, 0.1)"
               watts={15}
               runtime={devices.fan_circulation.runtime}
@@ -809,7 +829,7 @@ export default function Controls() {
               label="Bewässerung"
               subLabel="Drip Irrigation System"
               icon={Droplets}
-              iconColor={colors.emerald[400]}
+              iconColor={getSafeColor('emerald', 400)}
               iconBg="rgba(16, 185, 129, 0.1)"
               watts={50}
               runtime={devices.pump_main.runtime}
@@ -824,7 +844,7 @@ export default function Controls() {
               label="Heizung"
               subLabel="Ceramic Heater"
               icon={Thermometer}
-              iconColor={colors.red[400]}
+              iconColor={getSafeColor('red', 400)}
               iconBg="rgba(239, 68, 68, 0.1)"
               watts={150}
               runtime={devices.heater.runtime}
@@ -839,7 +859,7 @@ export default function Controls() {
               label="Entfeuchter"
               subLabel="Dehumidifier Pro"
               icon={Droplet}
-              iconColor={colors.orange[400]}
+              iconColor={getSafeColor('orange', 400)}
               iconBg="rgba(251, 146, 60, 0.1)"
               watts={250}
               runtime={devices.dehumidifier.runtime}
@@ -886,12 +906,12 @@ export default function Controls() {
           <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
-                <Thermometer size={20} style={{ color: colors.amber[500] }} /> Temperatur-Steuerung
+                <Thermometer size={20} style={{ color: getSafeColor('amber', 500) }} /> Temperatur-Steuerung
               </h3>
               <button
                 onClick={() => setAutomation(prev => ({ ...prev, tempControl: { ...prev.tempControl, enabled: !prev.tempControl.enabled } }))}
                 className="w-10 h-6 rounded-full transition-colors"
-                style={{ backgroundColor: automation.tempControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+                style={{ backgroundColor: automation.tempControl.enabled ? getSafeColor('emerald', 600) : theme.bg.hover }}
               >
                 <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.tempControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
               </button>
@@ -929,12 +949,12 @@ export default function Controls() {
           <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
-                <Droplets size={20} style={{ color: colors.blue[500] }} /> Luftfeuchte-Steuerung
+                <Droplets size={20} style={{ color: getSafeColor('blue', 500) }} /> Luftfeuchte-Steuerung
               </h3>
               <button
                 onClick={() => setAutomation(prev => ({ ...prev, humidityControl: { ...prev.humidityControl, enabled: !prev.humidityControl.enabled } }))}
                 className="w-10 h-6 rounded-full transition-colors"
-                style={{ backgroundColor: automation.humidityControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+                style={{ backgroundColor: automation.humidityControl.enabled ? getSafeColor('emerald', 600) : theme.bg.hover }}
               >
                 <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.humidityControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
               </button>
@@ -972,12 +992,12 @@ export default function Controls() {
           <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
-                <Brain size={20} style={{ color: colors.purple[500] }} /> VPD-Steuerung (Pro)
+                <Brain size={20} style={{ color: getSafeColor('purple', 500) }} /> VPD-Steuerung (Pro)
               </h3>
               <button
                 onClick={() => setAutomation(prev => ({ ...prev, vpdControl: { ...prev.vpdControl, enabled: !prev.vpdControl.enabled } }))}
                 className="w-10 h-6 rounded-full transition-colors"
-                style={{ backgroundColor: automation.vpdControl.enabled ? colors.emerald[600] : theme.bg.hover }}
+                style={{ backgroundColor: automation.vpdControl.enabled ? getSafeColor('emerald', 600) : theme.bg.hover }}
               >
                 <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.vpdControl.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
               </button>
@@ -995,7 +1015,7 @@ export default function Controls() {
                   className="w-full"
                 />
               </div>
-              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)', borderColor: 'rgba(168, 85, 247, 0.2)', color: colors.purple[300] }}>
+              <div className="text-xs p-3 rounded-lg" style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)', borderColor: 'rgba(168, 85, 247, 0.2)', color: getSafeColor('purple', 300) }}>
                 💡 VPD = Vapour Pressure Deficit<br />
                 Optimaler Bereich: 0.8-1.2 kPa (Veg), 1.0-1.4 kPa (Bloom)
               </div>
@@ -1006,12 +1026,12 @@ export default function Controls() {
           <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
-                <CloudRain size={20} style={{ color: colors.emerald[500] }} /> Auto-Bewässerung
+                <CloudRain size={20} style={{ color: getSafeColor('emerald', 500) }} /> Auto-Bewässerung
               </h3>
               <button
                 onClick={() => setAutomation(prev => ({ ...prev, autoWatering: { ...prev.autoWatering, enabled: !prev.autoWatering.enabled } }))}
                 className="w-10 h-6 rounded-full transition-colors"
-                style={{ backgroundColor: automation.autoWatering.enabled ? colors.emerald[600] : theme.bg.hover }}
+                style={{ backgroundColor: automation.autoWatering.enabled ? getSafeColor('emerald', 600) : theme.bg.hover }}
               >
                 <span className="block w-4 h-4 rounded-full bg-white shadow-sm transition-transform mt-1 ml-1" style={{ transform: automation.autoWatering.enabled ? 'translateX(16px)' : 'translateX(0)' }} />
               </button>
@@ -1078,7 +1098,7 @@ export default function Controls() {
         <div className="lg:col-span-2 p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-bold flex items-center gap-2" style={{ color: theme.text.primary }}>
-              <BarChart3 size={20} style={{ color: colors.yellow[500] }} /> Power Monitor (Live)
+              <BarChart3 size={20} style={{ color: getSafeColor('yellow', 500) }} /> Power Monitor (Live)
             </h3>
             <div className="text-xs px-3 py-1 rounded-lg" style={{ backgroundColor: theme.bg.hover, color: theme.text.muted }}>
               Letzte 20 Messungen
@@ -1104,16 +1124,16 @@ export default function Controls() {
       {/* Emergency Stop - Always visible */}
       <div className="p-6 rounded-2xl border shadow-xl flex items-center justify-between" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
         <div className="flex items-center gap-4">
-          <ShieldAlert size={32} style={{ color: colors.red[500] }} />
+          <ShieldAlert size={32} style={{ color: getSafeColor('red', 500) }} />
           <div>
-            <h3 className="font-bold" style={{ color: colors.red[200] }}>Notfall-Abschaltung</h3>
-            <p className="text-xs" style={{ color: colors.red[300] }}>Alle Geräte sofort ausschalten (Hardware NOT-AUS)</p>
+            <h3 className="font-bold" style={{ color: getSafeColor('red', 200) }}>Notfall-Abschaltung</h3>
+            <p className="text-xs" style={{ color: getSafeColor('red', 300) }}>Alle Geräte sofort ausschalten (Hardware NOT-AUS)</p>
           </div>
         </div>
         <button
           onClick={emergencyStop}
           className="px-6 py-3 rounded-xl font-bold uppercase tracking-wider transition-all hover:scale-105 shadow-lg"
-          style={{ backgroundColor: colors.red[600], color: '#ffffff', boxShadow: `0 10px 20px rgba(239, 68, 68, 0.4)` }}
+          style={{ backgroundColor: getSafeColor('red', 600), color: '#ffffff', boxShadow: `0 10px 20px rgba(239, 68, 68, 0.4)` }}
         >
           NOT-AUS
         </button>
