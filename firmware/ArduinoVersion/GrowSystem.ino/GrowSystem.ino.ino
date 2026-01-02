@@ -1,5 +1,5 @@
 /*
- * GROW MONITORING SYSTEM v2.4 - FINAL VERSION
+ * GROW MONITORING SYSTEM v2.4 - FIXED FOR ESP32 CORE 3.0+
  * Für Arduino IDE
  * Benötigte Bibliotheken:
  * - PubSubClient (für MQTT)
@@ -65,9 +65,8 @@ unsigned long lastMsg = 0;
 #define PWM_FREQ 25000        // 25 kHz PWM Frequenz
 #define PWM_RESOLUTION 8      // 8-bit (0-255)
 
-// PWM Kanäle (ESP32 hat 16 PWM Kanäle)
-#define PWM_CHANNEL_FAN 0
-#define PWM_CHANNEL_LIGHT 1
+// HINWEIS: In ESP32 Core 3.0 werden "Channels" nicht mehr manuell definiert.
+// Wir nutzen direkt die Pins. Die Definitionen für PWM_CHANNEL_... wurden entfernt.
 
 // Aktuelle PWM Werte (0-100%)
 int fanPWMValue = 0;
@@ -76,7 +75,7 @@ int lightPWMValue = 0;
 // Tachometer
 volatile unsigned long fanTachPulses = 0;
 unsigned long lastTachCheck = 0;
-int fanRPM = 0; 
+int fanRPM = 0;
 
 // ==========================================
 // 4. FUNKTIONEN
@@ -84,14 +83,18 @@ int fanRPM = 0;
 
 // Tachometer Interrupt Handler
 void IRAM_ATTR tachISR() {
-  fanTachPulses++;
+  // FIX: Warnung bei volatile ++ behoben
+  fanTachPulses = fanTachPulses + 1;
 }
 
 // PWM Wert setzen (0-100%)
 void setFanPWM(int percent) {
   fanPWMValue = constrain(percent, 0, 100);
   int dutyCycle = map(fanPWMValue, 0, 100, 0, 255);
-  ledcWrite(PWM_CHANNEL_FAN, dutyCycle);
+  
+  // FIX: Nutzung von PIN statt CHANNEL (ESP32 v3.0)
+  ledcWrite(PIN_FAN_PWM, dutyCycle);
+  
   Serial.print("Fan PWM gesetzt: ");
   Serial.print(fanPWMValue);
   Serial.println("%");
@@ -101,7 +104,10 @@ void setFanPWM(int percent) {
 void setLightPWM(int percent) {
   lightPWMValue = constrain(percent, 0, 100);
   int dutyCycle = map(lightPWMValue, 0, 100, 0, 255);
-  ledcWrite(PWM_CHANNEL_LIGHT, dutyCycle);
+  
+  // FIX: Nutzung von PIN statt CHANNEL (ESP32 v3.0)
+  ledcWrite(PIN_RJ11_PWM, dutyCycle);
+  
   Serial.print("Light PWM gesetzt: ");
   Serial.print(lightPWMValue);
   Serial.println("%");
@@ -152,7 +158,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   if (!error) {
     if (String(topic) == MQTT_TOPIC_COMMAND) {
       const char* action = doc["action"];
-      
       if (action) {
         if (strcmp(action, "reboot") == 0) {
           Serial.println("REBOOT BEFEHL ERHALTEN!");
@@ -228,14 +233,22 @@ void setup() {
   pinMode(PIN_LIGHT, OUTPUT);
   pinMode(PIN_FAN, OUTPUT);
 
-  // PWM Setup
-  ledcSetup(PWM_CHANNEL_FAN, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(PIN_FAN_PWM, PWM_CHANNEL_FAN);
-  ledcWrite(PWM_CHANNEL_FAN, 0); // Start bei 0%
+  // === PWM SETUP (FIXED FOR ESP32 CORE 3.0) ===
+  
+  // 1. Fan PWM Setup
+  // Neue Syntax: ledcAttach(pin, freq, resolution)
+  if (!ledcAttach(PIN_FAN_PWM, PWM_FREQ, PWM_RESOLUTION)) {
+      Serial.println("Fehler beim Fan PWM Setup!");
+  }
+  ledcWrite(PIN_FAN_PWM, 0); // Start bei 0%
 
-  ledcSetup(PWM_CHANNEL_LIGHT, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(PIN_RJ11_PWM, PWM_CHANNEL_LIGHT);
-  ledcWrite(PWM_CHANNEL_LIGHT, 0); // Start bei 0%
+  // 2. Grow Light PWM Setup (Fehlerbehebung)
+  // Alte Syntax (ledcSetup/ledcAttachPin) entfernt.
+  // Neue Syntax:
+  if (!ledcAttach(PIN_RJ11_PWM, PWM_FREQ, PWM_RESOLUTION)) {
+      Serial.println("Fehler beim Light PWM Setup!");
+  }
+  ledcWrite(PIN_RJ11_PWM, 0); // Start bei 0%
 
   // RJ11 Enable Pin
   pinMode(PIN_RJ11_ENABLE, OUTPUT);
@@ -253,7 +266,7 @@ void setup() {
   client.setServer(MQTT_SERVER, MQTT_PORT);
   client.setCallback(callback);
 
-  Serial.println("✅ PWM & RJ11 Steuerung initialisiert");
+  Serial.println("✅ PWM & RJ11 Steuerung initialisiert (Core 3.0)");
 }
 
 void loop() {

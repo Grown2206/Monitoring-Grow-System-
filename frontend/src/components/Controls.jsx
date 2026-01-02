@@ -28,7 +28,8 @@ const FALLBACK_COLORS = {
 
 // Hilfsfunktion für sicheren Farbzugriff
 const getSafeColor = (colorName, weight) => {
-  return importedColors?.[colorName]?.[weight] || FALLBACK_COLORS?.[colorName]?.[weight] || '#888888';
+  // KORREKTUR: 'importedColors' zu 'colors' geändert, da es oben so importiert wurde
+  return colors?.[colorName]?.[weight] || FALLBACK_COLORS?.[colorName]?.[weight] || '#888888';
 };
 // ===========================================================
 
