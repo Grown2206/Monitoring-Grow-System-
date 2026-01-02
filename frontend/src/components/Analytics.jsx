@@ -41,13 +41,19 @@ export default function Analytics() {
     setLoading(true);
     try {
       setError(null);
-      const [history, logData, plantData] = await Promise.all([
+      const [historyRes, logData, plantData] = await Promise.all([
         api.getHistory(),
         api.getLogs(),
         api.getPlants()
       ]);
-      
-      if (!Array.isArray(history)) throw new Error("Ungültiges Datenformat vom Server");
+
+      const history = historyRes?.data || historyRes || [];
+      if (!Array.isArray(history)) {
+        console.warn("History ist kein Array, verwende leeres Array");
+        setRawData([]);
+        setLoading(false);
+        return;
+      }
 
       // Rohdaten aufbereiten
       const processed = history

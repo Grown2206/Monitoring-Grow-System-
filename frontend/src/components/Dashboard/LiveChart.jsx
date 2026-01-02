@@ -13,7 +13,8 @@ export default function LiveChart({ accentColor = '#fbbf24' }) { // Standard: Am
 
   const loadHistory = async () => {
     try {
-      const history = await api.getHistory();
+      const response = await api.getHistory();
+      const history = response?.data || response || [];
       const formatted = history.map(entry => ({
         time: new Date(entry.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         temp: entry.readings?.temp || 0,

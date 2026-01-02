@@ -15,12 +15,16 @@ export default function GrowRecipes() {
 
   const fetchRecipes = async () => {
     try {
-      const data = await recipesAPI.getAll();
+      const response = await recipesAPI.getAll();
+      const data = response?.data || response || [];
+
+      // Ensure it's an array
+      const recipesArray = Array.isArray(data) ? data : [];
 
       // Filter wenn nötig
       const filtered = filter === 'all'
-        ? data
-        : data.filter(recipe => recipe.type === filter);
+        ? recipesArray
+        : recipesArray.filter(recipe => recipe.type === filter);
 
       setRecipes(filtered);
     } catch (error) {
