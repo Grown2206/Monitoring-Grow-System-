@@ -69,13 +69,20 @@ app.use(cors({
 // 3. Rate Limiting - Schutz vor Brute-Force
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: 100, // Max 100 Requests pro IP
+  max: isDevelopment ? 1000 : 100, // Development: 1000 Requests, Production: 100 Requests
   message: {
     success: false,
     message: 'Zu viele Anfragen von dieser IP, bitte versuche es in 15 Minuten erneut'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip Rate-Limiting für WebSocket und MQTT Endpoints in Development
+    if (isDevelopment && (req.path.includes('/socket') || req.path.includes('/mqtt'))) {
+      return true;
+    }
+    return false;
+  }
 });
 
 // Strengeres Limit für Auth-Endpoints
