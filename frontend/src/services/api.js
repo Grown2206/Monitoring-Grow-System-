@@ -1,68 +1,48 @@
-const API_URL = `http://${window.location.hostname}:3000/api`;
+/**
+ * Legacy API wrapper - leitet zur neuen utils/api.js mit Auth-Support weiter
+ * Diese Datei wird nur noch für Backwards-Compatibility behalten
+ */
 
-const handleResponse = async (response) => {
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.message || 'API Fehler');
-  }
-  return response.json();
-};
+import {
+  api as newApi,
+  plantsAPI,
+  dataAPI,
+  calendarAPI,
+  aiAPI,
+  settingsAPI,
+  controlsAPI
+} from '../utils/api';
 
+// Alte API-Methoden (für Backwards-Compatibility)
 export const api = {
   // Pflanzen
-  getPlants: () => fetch(`${API_URL}/plants`).then(handleResponse),
-  updatePlant: (slotId, data) => fetch(`${API_URL}/plants/${slotId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(handleResponse),
+  getPlants: () => plantsAPI.getAll(),
+  updatePlant: (slotId, data) => plantsAPI.update(slotId, data),
 
   // Historie & Logs
-  getHistory: () => fetch(`${API_URL}/history`).then(handleResponse),
-  getLogs: () => fetch(`${API_URL}/logs`).then(handleResponse),
+  getHistory: () => dataAPI.getHistory(),
+  getLogs: () => dataAPI.getLogs(),
 
   // Kalender
-  getEvents: () => fetch(`${API_URL}/calendar`).then(handleResponse),
-  createEvent: (data) => fetch(`${API_URL}/calendar`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(handleResponse),
-  deleteEvent: (id) => fetch(`${API_URL}/calendar/${id}`, {
-    method: 'DELETE'
-  }).then(handleResponse),
+  getEvents: () => calendarAPI.getEvents(),
+  createEvent: (data) => calendarAPI.createEvent(data),
+  deleteEvent: (id) => calendarAPI.deleteEvent(id),
 
   // AI Consultant
-  getConsultation: (contextData) => fetch(`${API_URL}/ai/consult`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(contextData)
-  }).then(handleResponse),
+  getConsultation: (contextData) => aiAPI.consult(contextData.message || contextData),
 
   // Automation & Config
-  getAutoConfig: () => fetch(`${API_URL}/settings/automation`).then(handleResponse),
-  updateAutoConfig: (data) => fetch(`${API_URL}/settings/automation`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(handleResponse),
+  getAutoConfig: () => settingsAPI.getAutomation(),
+  updateAutoConfig: (data) => settingsAPI.setAutomation(data),
 
-  // Webhooks (Benachrichtigungen)
-  getWebhook: () => fetch(`${API_URL}/settings/webhook`).then(handleResponse),
-  updateWebhook: (url) => fetch(`${API_URL}/settings/webhook`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url })
-  }).then(handleResponse),
+  // Webhooks
+  getWebhook: () => settingsAPI.getWebhook(),
+  updateWebhook: (url) => settingsAPI.setWebhook(url),
 
   // System Befehle
-  systemReboot: () => fetch(`${API_URL}/system/reboot`, { method: 'POST' }).then(handleResponse),
-  systemReset: () => fetch(`${API_URL}/system/reset`, { method: 'POST' }).then(handleResponse),
+  systemReboot: () => controlsAPI.rebootSystem(),
+  systemReset: () => controlsAPI.resetSystem(),
 
-  // NEU: Relais schalten (Wichtig f�r Controls.jsx)
-  toggleRelay: (relayKey, state) => fetch(`${API_URL}/controls/relay`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ relay: relayKey, state: state })
-  }).then(handleResponse),
+  // Relais schalten
+  toggleRelay: (relayKey, state) => controlsAPI.setRelay(relayKey, state),
 };

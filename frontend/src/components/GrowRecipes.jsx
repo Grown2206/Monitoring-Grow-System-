@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BookOpen, Clock, TrendingUp, Heart, ChevronDown, ChevronUp, Thermometer, Droplets, Zap, Beaker } from 'lucide-react';
+import { recipesAPI } from '../utils/api';
 
 export default function GrowRecipes() {
   const [recipes, setRecipes] = useState([]);
@@ -14,16 +15,14 @@ export default function GrowRecipes() {
 
   const fetchRecipes = async () => {
     try {
-      const url = filter === 'all'
-        ? '/api/recipes'
-        : `/api/recipes?type=${filter}`;
+      const data = await recipesAPI.getAll();
 
-      const response = await fetch(url);
-      const data = await response.json();
+      // Filter wenn nötig
+      const filtered = filter === 'all'
+        ? data
+        : data.filter(recipe => recipe.type === filter);
 
-      if (data.success) {
-        setRecipes(data.data);
-      }
+      setRecipes(filtered);
     } catch (error) {
       console.error('Fehler beim Laden der Rezepte:', error);
     } finally {
@@ -33,7 +32,7 @@ export default function GrowRecipes() {
 
   const handleUseRecipe = async (recipeId) => {
     try {
-      await fetch(`/api/recipes/${recipeId}/use`, { method: 'POST' });
+      await recipesAPI.use(recipeId);
       alert('Rezept wird verwendet! Sie können es jetzt Ihren Pflanzen zuweisen.');
     } catch (error) {
       console.error('Fehler beim Verwenden des Rezepts:', error);
@@ -42,7 +41,7 @@ export default function GrowRecipes() {
 
   const handleLikeRecipe = async (recipeId) => {
     try {
-      await fetch(`/api/recipes/${recipeId}/like`, { method: 'POST' });
+      await recipesAPI.like(recipeId);
       fetchRecipes(); // Reload
     } catch (error) {
       console.error('Fehler beim Liken:', error);
