@@ -16,6 +16,7 @@ const notificationController = require('../controllers/notificationController');
 const weatherController = require('../controllers/weatherController');
 const recipeController = require('../controllers/recipeController');
 const analyticsController = require('../controllers/analyticsController');
+const quickActionController = require('../controllers/quickActionController');
 const nutrientRoutes = require('./nutrientRoutes');
 const vpdRoutes = require('./vpdRoutes');
 const sensorRoutes = require('./sensorRoutes');
@@ -312,5 +313,16 @@ router.use('/sensors', sensorRoutes);
 // 14. TIMELAPSE (Public - optional auth)
 // ==========================================
 router.use('/timelapse', timelapseRoutes);
+
+// ==========================================
+// 15. QUICK ACTIONS (Public - optional auth)
+// ==========================================
+router.post('/quick-actions/fan', optionalAuth, quickActionController.setFan);
+router.post('/quick-actions/light', optionalAuth, quickActionController.setLight);
+router.post('/quick-actions/humidifier', optionalAuth, quickActionController.setHumidifier);
+router.post('/quick-actions/vpd-optimize', optionalAuth, quickActionController.optimizeVPD);
+router.post('/quick-actions/nutrients', optionalAuth, quickActionController.doseNutrients);
+router.post('/quick-actions/emergency-stop', optionalAuth, quickActionController.emergencyStop);
+router.get('/quick-actions/history', optionalAuth, quickActionController.getHistory);
 
 module.exports = router;

@@ -156,6 +156,16 @@ export const analyticsAPI = {
   getOptimizations: () => api.get('/analytics/optimizations')
 };
 
+export const quickActionsAPI = {
+  setFan: (speed) => api.post('/quick-actions/fan', { speed }),
+  setLight: (value) => api.post('/quick-actions/light', { value }),
+  setHumidifier: (value) => api.post('/quick-actions/humidifier', { value }),
+  optimizeVPD: (currentVPD, targetVPD) => api.post('/quick-actions/vpd-optimize', { currentVPD, targetVPD }),
+  doseNutrients: (duration) => api.post('/quick-actions/nutrients', { duration }),
+  emergencyStop: () => api.post('/quick-actions/emergency-stop'),
+  getHistory: () => api.get('/quick-actions/history')
+};
+
 export const controlsAPI = {
   setRelay: (relay, state) => api.post('/controls/relay', { relay, state }),
   setFanPWM: (value) => api.post('/controls/fan-pwm', { value }),

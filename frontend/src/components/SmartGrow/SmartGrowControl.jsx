@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../theme';
 import { useSocket } from '../../context/SocketContext';
+import { quickActionsAPI } from '../../utils/api';
 import {
   Zap, Sparkles, Target, TrendingUp, AlertTriangle, CheckCircle2,
   Droplets, Thermometer, Sun, Wind, Beaker, Clock, Play, Pause,
   Settings, ArrowRight, Lightbulb, Activity, BarChart3, Cpu,
-  ChevronRight, BookOpen, Calendar, Bot
+  ChevronRight, BookOpen, Calendar, Bot, Octagon
 } from 'lucide-react';
 
 const SmartGrowControl = () => {
@@ -82,9 +83,59 @@ const SmartGrowControl = () => {
     setAiRecommendations(recommendations);
   };
 
-  const quickAction = (action, value) => {
-    console.log(`Quick Action: ${action} = ${value}`);
-    // Hier würde die tatsächliche Steuerung erfolgen
+  const quickAction = async (action, value) => {
+    try {
+      let response;
+
+      switch (action) {
+        case 'fan':
+          response = await quickActionsAPI.setFan(value);
+          console.log(`✅ Lüfter auf ${value}% gesetzt`);
+          break;
+
+        case 'light':
+          response = await quickActionsAPI.setLight(value);
+          console.log(`✅ Licht ${value === 'toggle' ? 'umgeschaltet' : value === 'on' ? 'eingeschaltet' : 'ausgeschaltet'}`);
+          break;
+
+        case 'humidifier':
+          response = await quickActionsAPI.setHumidifier(value);
+          console.log(`✅ Luftbefeuchter ${value === 'on' ? 'eingeschaltet' : 'ausgeschaltet'}`);
+          break;
+
+        case 'vpd-optimize':
+          const temp = sensorData?.temp || 24;
+          const rh = sensorData?.humidity || 50;
+          const svp = 0.61078 * Math.exp((17.27 * temp) / (temp + 237.3));
+          const currentVPD = svp * (1 - rh / 100);
+          const targetVPD = { min: 0.8, max: 1.2 };
+
+          response = await quickActionsAPI.optimizeVPD(currentVPD, targetVPD);
+          console.log(`✅ VPD optimiert: ${currentVPD.toFixed(2)} kPa`);
+          break;
+
+        case 'nutrients':
+          response = await quickActionsAPI.doseNutrients(value || 30);
+          console.log(`✅ Nährstoff-Dosierung gestartet (${value || 30}s)`);
+          break;
+
+        case 'emergency-stop':
+          response = await quickActionsAPI.emergencyStop();
+          console.log(`🚨 NOT-AUS aktiviert - Alle Systeme gestoppt`);
+          break;
+
+        default:
+          console.log(`Quick Action: ${action} = ${value}`);
+      }
+
+      if (response?.data) {
+        // Optional: Show success notification
+        console.log('Response:', response.data);
+      }
+    } catch (error) {
+      console.error(`❌ Quick Action Fehler (${action}):`, error);
+      // Optional: Show error notification
+    }
   };
 
   const activateRecipe = (recipe) => {
@@ -487,18 +538,36 @@ const SmartGrowControl = () => {
               theme={currentTheme}
             />
             <QuickActionBtn
-              label="Befeuchter"
+              label="VPD Optimieren"
               icon={<Droplets size={18} />}
-              onClick={() => quickAction('humidifier', 'on')}
+              onClick={() => quickAction('vpd-optimize')}
               theme={currentTheme}
             />
             <QuickActionBtn
-              label="Snapshot"
-              icon={<Activity size={18} />}
-              onClick={() => quickAction('snapshot', true)}
+              label="Nährstoffe"
+              icon={<Beaker size={18} />}
+              onClick={() => quickAction('nutrients', 30)}
               theme={currentTheme}
             />
           </div>
+
+          {/* Emergency Stop Button */}
+          <button
+            onClick={() => {
+              if (window.confirm('⚠️ NOT-AUS: Alle Systeme werden gestoppt! Fortfahren?')) {
+                quickAction('emergency-stop');
+              }
+            }}
+            className="w-full mt-4 p-4 rounded-lg border-2 flex items-center justify-center gap-3 transition-all hover:brightness-110 font-bold"
+            style={{
+              backgroundColor: '#ef4444',
+              borderColor: '#dc2626',
+              color: '#ffffff'
+            }}
+          >
+            <Octagon size={20} />
+            <span>NOT-AUS</span>
+          </button>
         </div>
 
         {/* System Stats */}
