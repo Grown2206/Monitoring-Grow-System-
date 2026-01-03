@@ -4,7 +4,7 @@ import { useSocket } from '../../context/SocketContext';
 import {
   Beaker, Droplet, ThermometerSun, Calendar, Play, Settings,
   AlertTriangle, CheckCircle, RefreshCw, Droplets, TrendingUp,
-  Package, Clock, Activity
+  Package, Clock, Activity, BookOpen
 } from 'lucide-react';
 
 // Stat Card Komponente
@@ -163,6 +163,7 @@ export default function NutrientDashboard() {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showManualDose, setShowManualDose] = useState(false);
+  const [activeRecipe, setActiveRecipe] = useState(null);
 
   // Manuelle Dosierung State
   const [manualForm, setManualForm] = useState({
@@ -175,6 +176,14 @@ export default function NutrientDashboard() {
     loadData();
     const interval = setInterval(loadData, 30000); // Alle 30 Sek
     return () => clearInterval(interval);
+  }, []);
+
+  // Load active recipe from Smart Grow Control
+  useEffect(() => {
+    const savedRecipe = localStorage.getItem('active-grow-recipe');
+    if (savedRecipe) {
+      setActiveRecipe(JSON.parse(savedRecipe));
+    }
   }, []);
 
   const loadData = async () => {
@@ -321,6 +330,45 @@ export default function NutrientDashboard() {
           </div>
           <div className="mt-2 text-xs text-slate-400">
             Verstrichene Zeit: {((nutrientStatus.elapsed_ms || 0) / 1000).toFixed(1)}s
+          </div>
+        </div>
+      )}
+
+      {/* Recipe Integration - Smart Grow Control Link */}
+      {activeRecipe && (
+        <div className="bg-gradient-to-br from-purple-900/20 to-pink-900/20 border border-purple-800/50 p-6 rounded-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              <BookOpen className="text-purple-400" size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Aktives Rezept: {activeRecipe.name}</h3>
+              <p className="text-xs text-purple-400">Verknüpft mit Smart Grow Control Center</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4 mt-4">
+            <div className="bg-slate-950/50 p-3 rounded-lg">
+              <div className="text-xs text-slate-500 mb-1">Ziel EC</div>
+              <div className="text-lg font-bold text-purple-400">
+                {activeRecipe.nutrients?.week1?.ec || '1.2-1.8'} mS/cm
+              </div>
+            </div>
+            <div className="bg-slate-950/50 p-3 rounded-lg">
+              <div className="text-xs text-slate-500 mb-1">Ziel pH</div>
+              <div className="text-lg font-bold text-purple-400">5.8-6.2</div>
+            </div>
+            <div className="bg-slate-950/50 p-3 rounded-lg">
+              <div className="text-xs text-slate-500 mb-1">Phase</div>
+              <div className="text-lg font-bold text-purple-400 capitalize">
+                {activeRecipe.phase || 'Vegetativ'}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-purple-800/30 flex items-center gap-2 text-sm text-purple-300">
+            <TrendingUp size={16} />
+            <span>Nährstoffplan wird automatisch von der Automation-Engine gesteuert</span>
           </div>
         </div>
       )}

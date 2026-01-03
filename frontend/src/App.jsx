@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { SocketProvider, useSocket } from './context/SocketContext';
 import { AlertProvider, useAlert } from './context/AlertContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { ThemeProvider } from './theme';
+import { ThemeProvider, useTheme } from './theme';
+import ThemeSwitcher from './components/ThemeSwitcher';
 import Dashboard from './components/Dashboard';
 import Plants from './components/Plants';
 import Controls from './components/Controls';
@@ -17,10 +18,15 @@ import NutrientDashboard from './components/Nutrients/NutrientDashboard';
 import VPDDashboard from './components/VPD/VPDDashboard';
 import SensorDashboard from './components/Sensors/SensorDashboard';
 import TimelapseDashboard from './components/Timelapse/TimelapseDashboard';
+import MaintenanceDashboard from './components/Maintenance/MaintenanceDashboard';
+import MultiCameraView from './components/Camera/MultiCameraView';
+import AutomationEngine from './components/Automation/AutomationEngine';
+import SmartGrowControl from './components/SmartGrow/SmartGrowControl';
 import {
   LayoutDashboard, Sprout, Settings as SettingsIcon, BarChart3,
   Calendar, Cpu, Bot, Sliders, Bell, Menu, X, Leaf, BookOpen, LogOut, Loader,
-  Beaker, Droplet, Zap, Film
+  Beaker, Droplet, Zap as ZapIcon, Film, Wrench, Camera, ChevronDown, ChevronRight,
+  TreePine, Activity, Cog, Sparkles
 } from 'lucide-react';
 
 // Erweiterte Status-Badge Komponente
@@ -42,38 +48,116 @@ const StatusBadge = () => {
 };
 
 // Haupt-Navigation Button
-const NavBtn = ({ id, active, set, icon, label, mobile = false }) => (
-  <button 
+const NavBtn = ({ id, active, set, icon, label, mobile = false, isSubItem = false, theme }) => (
+  <button
     onClick={() => set(id)}
-    className={`group flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 w-full ${
-      active === id 
-        ? 'bg-gradient-to-r from-emerald-600/20 to-emerald-600/5 text-emerald-400 border-l-4 border-emerald-500' 
-        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+    className={`group flex items-center gap-3 rounded-xl transition-all duration-200 w-full ${
+      isSubItem ? 'px-4 py-2 ml-2' : 'px-4 py-3'
+    } ${
+      active === id
+        ? 'text-emerald-400 border-l-4 border-emerald-500'
+        : 'hover:text-slate-200'
     }`}
+    style={{
+      backgroundColor: active === id ? `rgba(${theme?.accent?.rgb || '16, 185, 129'}, 0.1)` : 'transparent',
+      color: active === id ? (theme?.accent?.color || '#10b981') : (theme?.text?.secondary || '#94a3b8')
+    }}
   >
-    <div className={`${active === id ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+    <div className={`${active === id ? '' : 'group-hover:text-slate-300'}`}>
       {icon}
     </div>
-    <span className={`font-medium ${mobile ? 'block' : 'hidden md:inline'}`}>{label}</span>
-    {active === id && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 hidden md:block shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
+    <span className={`font-medium ${mobile ? 'block' : 'hidden md:inline'} text-sm`}>{label}</span>
+    {active === id && !isSubItem && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-400 hidden md:block shadow-[0_0_8px_rgba(52,211,153,0.8)]" />}
   </button>
 );
 
+// Navigation Category (Collapsible)
+const NavCategory = ({ category, expanded, toggle, activeTab, setActiveTab, setSidebarOpen, theme }) => {
+  const isAnyChildActive = category.items.some(item => item.id === activeTab);
+
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => toggle(category.id)}
+        className="group flex items-center justify-between w-full px-4 py-2 rounded-xl transition-all duration-200 hover:bg-slate-800/50"
+        style={{ color: theme.text.secondary }}
+      >
+        <div className="flex items-center gap-3">
+          <div className={`${isAnyChildActive ? 'text-emerald-400' : 'text-slate-500 group-hover:text-slate-300'}`}>
+            {category.icon}
+          </div>
+          <span className="font-semibold text-xs uppercase tracking-wider">{category.label}</span>
+        </div>
+        <div className="text-slate-500">
+          {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        </div>
+      </button>
+      {expanded && (
+        <div className="mt-1 space-y-1">
+          {category.items.map(item => (
+            <NavBtn
+              key={item.id}
+              {...item}
+              active={activeTab}
+              set={(id) => {
+                setActiveTab(id);
+                setSidebarOpen(false);
+              }}
+              isSubItem={true}
+              theme={theme}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Header mit Benachrichtigungen
 const TopBar = ({ title, toggleSidebar }) => {
+  const { currentTheme } = useTheme();
+
   return (
-    <header className="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 p-4 flex justify-between items-center sticky top-0 z-40">
+    <header
+      className="backdrop-blur-md border-b p-4 flex justify-between items-center sticky top-0 z-40"
+      style={{
+        backgroundColor: currentTheme.bg.card + 'CC', // 80% opacity
+        borderColor: currentTheme.border.default
+      }}
+    >
       <div className="flex items-center gap-4">
-        <button onClick={toggleSidebar} className="md:hidden text-slate-400 hover:text-white">
+        <button
+          onClick={toggleSidebar}
+          className="md:hidden transition-colors"
+          style={{ color: currentTheme.text.secondary }}
+        >
           <Menu size={24} />
         </button>
-        <h1 className="text-xl font-bold text-slate-100 tracking-tight">{title}</h1>
+        <h1
+          className="text-xl font-bold tracking-tight"
+          style={{ color: currentTheme.text.primary }}
+        >
+          {title}
+        </h1>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <StatusBadge />
-        <button className="relative p-2 text-slate-400 hover:text-white transition-colors">
+        <ThemeSwitcher />
+        <button
+          className="relative p-2 transition-colors rounded-lg"
+          style={{
+            color: currentTheme.text.secondary,
+            backgroundColor: currentTheme.bg.hover
+          }}
+        >
           <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-slate-900"></span>
+          <span
+            className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full border"
+            style={{
+              backgroundColor: '#ef4444',
+              borderColor: currentTheme.bg.card
+            }}
+          />
         </button>
       </div>
     </header>
@@ -83,8 +167,16 @@ const TopBar = ({ title, toggleSidebar }) => {
 // Haupt-App mit Auth-Check
 function AppContent() {
   const { isAuthenticated, user, logout, loading } = useAuth();
+  const { currentTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({
+    grow: true,
+    environment: true,
+    automation: true,
+    media: true,
+    system: false
+  });
 
   // Loading State während Token-Validierung
   if (loading) {
@@ -107,6 +199,7 @@ function AppContent() {
   const getPageTitle = () => {
     switch(activeTab) {
       case 'dashboard': return 'System Übersicht';
+      case 'smartcontrol': return 'Smart Grow Control Center';
       case 'plants': return 'Pflanzen Management';
       case 'recipes': return 'Grow-Rezepte';
       case 'calendar': return 'Grow Kalender';
@@ -116,6 +209,9 @@ function AppContent() {
       case 'sensors': return 'EC/pH Sensoren';
       case 'vpd': return 'VPD Control';
       case 'timelapse': return 'Timelapse Generator';
+      case 'maintenance': return 'Wartungsplan';
+      case 'cameras': return 'Multi-Camera System';
+      case 'automation': return 'Automation Engine';
       case 'settings': return 'Einstellungen';
       case 'hardware': return 'System Status';
       case 'ai': return 'AI Consultant';
@@ -123,41 +219,103 @@ function AppContent() {
     }
   };
 
-  const navItems = [
-    { id: 'dashboard', icon: <LayoutDashboard size={20} />, label: 'Übersicht' },
-    { id: 'plants', icon: <Sprout size={20} />, label: 'Pflanzen' },
-    { id: 'recipes', icon: <BookOpen size={20} />, label: 'Rezepte' },
-    { id: 'calendar', icon: <Calendar size={20} />, label: 'Kalender' },
-    { id: 'analytics', icon: <BarChart3 size={20} />, label: 'Historie' },
-    { id: 'controls', icon: <Sliders size={20} />, label: 'Steuerung' },
-    { id: 'nutrients', icon: <Beaker size={20} />, label: 'Nährstoffe' },
-    { id: 'sensors', icon: <Zap size={20} />, label: 'EC/pH' },
-    { id: 'vpd', icon: <Droplet size={20} />, label: 'VPD' },
-    { id: 'timelapse', icon: <Film size={20} />, label: 'Timelapse' },
-    { id: 'ai', icon: <Bot size={20} />, label: 'AI Consultant' },
-    { id: 'hardware', icon: <Cpu size={20} />, label: 'System' },
-    { id: 'settings', icon: <SettingsIcon size={20} />, label: 'Einstellungen' },
-  ];
+  const toggleCategory = (categoryId) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryId]: !prev[categoryId]
+    }));
+  };
+
+  const navStructure = {
+    main: [
+      { id: 'dashboard', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
+      { id: 'smartcontrol', icon: <Sparkles size={20} />, label: 'Smart Control', highlight: true }
+    ],
+    categories: [
+      {
+        id: 'grow',
+        label: 'Grow Management',
+        icon: <TreePine size={20} />,
+        items: [
+          { id: 'plants', icon: <Sprout size={18} />, label: 'Pflanzen' },
+          { id: 'recipes', icon: <BookOpen size={18} />, label: 'Rezepte' },
+          { id: 'calendar', icon: <Calendar size={18} />, label: 'Kalender' }
+        ]
+      },
+      {
+        id: 'environment',
+        label: 'Environment',
+        icon: <Activity size={20} />,
+        items: [
+          { id: 'vpd', icon: <Droplet size={18} />, label: 'VPD Control' },
+          { id: 'sensors', icon: <ZapIcon size={18} />, label: 'EC/pH Sensoren' },
+          { id: 'analytics', icon: <BarChart3 size={18} />, label: 'Daten Analyse' }
+        ]
+      },
+      {
+        id: 'automation',
+        label: 'Automation',
+        icon: <Cog size={20} />,
+        items: [
+          { id: 'automation', icon: <ZapIcon size={18} />, label: 'Automation Rules' },
+          { id: 'nutrients', icon: <Beaker size={18} />, label: 'Nährstoffe & Dosing' },
+          { id: 'controls', icon: <Sliders size={18} />, label: 'Manuelle Steuerung' }
+        ]
+      },
+      {
+        id: 'media',
+        label: 'Media',
+        icon: <Camera size={20} />,
+        items: [
+          { id: 'cameras', icon: <Camera size={18} />, label: 'Multi-Camera' },
+          { id: 'timelapse', icon: <Film size={18} />, label: 'Timelapse' }
+        ]
+      },
+      {
+        id: 'system',
+        label: 'System',
+        icon: <Cpu size={20} />,
+        items: [
+          { id: 'maintenance', icon: <Wrench size={18} />, label: 'Wartungsplan' },
+          { id: 'hardware', icon: <Cpu size={18} />, label: 'Hardware Status' },
+          { id: 'ai', icon: <Bot size={18} />, label: 'AI Assistant' },
+          { id: 'settings', icon: <SettingsIcon size={18} />, label: 'Einstellungen' }
+        ]
+      }
+    ]
+  };
 
   // Eingeloggt -> Normale App
   return (
     <SocketProvider>
-        <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex overflow-hidden selection:bg-emerald-500/30">
-          
+        <div
+          className="min-h-screen font-sans flex overflow-hidden"
+          style={{
+            backgroundColor: currentTheme.bg.main,
+            color: currentTheme.text.primary
+          }}
+        >
+
           {/* Mobile Overlay */}
           {sidebarOpen && (
-            <div 
+            <div
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
           )}
 
           {/* Sidebar */}
-          <aside className={`
-            fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-900 border-r border-slate-800 
-            transform transition-transform duration-300 ease-in-out flex flex-col
-            ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          `}>
+          <aside
+            className={`
+              fixed md:static inset-y-0 left-0 z-50 w-64 border-r
+              transform transition-transform duration-300 ease-in-out flex flex-col
+              ${sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}
+            style={{
+              backgroundColor: currentTheme.bg.card,
+              borderColor: currentTheme.border.default
+            }}
+          >
             <div className="p-6 flex items-center justify-between border-b border-slate-800/50">
               <div className="flex items-center gap-3">
                 <div className="bg-gradient-to-br from-emerald-500 to-green-600 p-2 rounded-lg shadow-lg shadow-emerald-900/20">
@@ -174,14 +332,34 @@ function AppContent() {
             </div>
 
             <nav className="flex-1 overflow-y-auto p-4 space-y-1">
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-2">Hauptmenü</div>
-              {navItems.slice(0, 6).map(item => (
-                <NavBtn key={item.id} {...item} active={activeTab} set={(id) => {setActiveTab(id); setSidebarOpen(false);}} />
+              {/* Main Dashboard */}
+              {navStructure.main.map(item => (
+                <NavBtn
+                  key={item.id}
+                  {...item}
+                  active={activeTab}
+                  set={(id) => {
+                    setActiveTab(id);
+                    setSidebarOpen(false);
+                  }}
+                  theme={currentTheme}
+                />
               ))}
 
-              <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-4 mt-6">Tools & System</div>
-              {navItems.slice(6).map(item => (
-                <NavBtn key={item.id} {...item} active={activeTab} set={(id) => {setActiveTab(id); setSidebarOpen(false);}} />
+              <div className="my-4 border-t" style={{ borderColor: currentTheme.border.default }} />
+
+              {/* Collapsible Categories */}
+              {navStructure.categories.map(category => (
+                <NavCategory
+                  key={category.id}
+                  category={category}
+                  expanded={expandedCategories[category.id]}
+                  toggle={toggleCategory}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  setSidebarOpen={setSidebarOpen}
+                  theme={currentTheme}
+                />
               ))}
             </nav>
 
@@ -215,6 +393,7 @@ function AppContent() {
             <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
               <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                 {activeTab === 'dashboard' && <Dashboard changeTab={setActiveTab} />}
+                {activeTab === 'smartcontrol' && <SmartGrowControl />}
                 {activeTab === 'plants' && <Plants />}
                 {activeTab === 'recipes' && <GrowRecipes />}
                 {activeTab === 'calendar' && <CalendarView />}
@@ -226,6 +405,9 @@ function AppContent() {
                 {activeTab === 'sensors' && <SensorDashboard />}
                 {activeTab === 'vpd' && <VPDDashboard />}
                 {activeTab === 'timelapse' && <TimelapseDashboard />}
+                {activeTab === 'maintenance' && <MaintenanceDashboard />}
+                {activeTab === 'cameras' && <MultiCameraView />}
+                {activeTab === 'automation' && <AutomationEngine />}
                 {activeTab === 'settings' && <Settings />}
               </div>
             </main>
