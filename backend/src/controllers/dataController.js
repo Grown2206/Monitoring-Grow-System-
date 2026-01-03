@@ -50,7 +50,7 @@ const getHistory = async (req, res, next) => {
     const {
       hours = 24,
       page = 1,
-      limit = 100,
+      limit, // Wird unten dynamisch gesetzt wenn nicht angegeben
       sort = 'timestamp',
       order = 'asc'
     } = req.query;
@@ -58,19 +58,11 @@ const getHistory = async (req, res, next) => {
     // Zeitraum berechnen
     const hoursAgo = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-    // Pagination berechnen
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    // Sort-Order bestimmen
-    const sortOrder = order === 'desc' ? -1 : 1;
-
-    // Query ausführen
+    // Hole ALLE Daten im Zeitraum ohne Limit (Performance: Recharts kann 2000+ Punkte problemlos handlen)
     const [history, total] = await Promise.all([
       SensorLog.find({ timestamp: { $gte: hoursAgo } })
-        .sort({ [sort]: sortOrder })
-        .limit(parseInt(limit))
-        .skip(skip)
-        .lean(), // .lean() für bessere Performance (gibt plain JS objects zurück)
+        .sort({ timestamp: 1 }) // Chronologisch (ASC)
+        .lean(), // .lean() für bessere Performance
       SensorLog.countDocuments({ timestamp: { $gte: hoursAgo } })
     ]);
 
@@ -78,11 +70,11 @@ const getHistory = async (req, res, next) => {
       success: true,
       data: history,
       pagination: {
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        pages: Math.ceil(total / parseInt(limit)),
-        hasMore: skip + history.length < total
+        total: history.length,
+        page: 1,
+        limit: history.length,
+        pages: 1,
+        hasMore: false
       },
       meta: {
         hours: parseInt(hours),

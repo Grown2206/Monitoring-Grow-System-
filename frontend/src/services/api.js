@@ -21,7 +21,7 @@ export const api = {
   updatePlant: (slotId, data) => plantsAPI.update(slotId, data),
 
   // Historie & Logs
-  getHistory: () => dataAPI.getHistory(),
+  getHistory: (params) => dataAPI.getHistory(params),
   getLogs: () => dataAPI.getLogs(),
 
   // Kalender

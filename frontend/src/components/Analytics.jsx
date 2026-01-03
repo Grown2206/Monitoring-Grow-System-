@@ -259,6 +259,101 @@ const HeatmapChart = ({ data, metric, theme }) => {
   );
 };
 
+// GitHub-Style Activity Calendar (letzte 12 Wochen)
+const ActivityCalendar = ({ data, theme }) => {
+  const weeksToShow = 12;
+  const today = new Date();
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - (weeksToShow * 7));
+
+  // Erstelle Array mit allen Tagen
+  const days = [];
+  const currentDate = new Date(startDate);
+
+  while (currentDate <= today) {
+    const dayData = data.filter(d => {
+      const dDate = new Date(d.timestamp);
+      return dDate.toDateString() === currentDate.toDateString();
+    });
+
+    // Berechne "Aktivitäts-Score" für den Tag (basierend auf Daten-Anzahl und Klima-Qualität)
+    let score = 0;
+    if (dayData.length > 0) {
+      const avgTemp = dayData.reduce((s, d) => s + (d.temp || 0), 0) / dayData.length;
+      const avgHum = dayData.reduce((s, d) => s + (d.humidity || 0), 0) / dayData.length;
+
+      // Score: Daten vorhanden (0-25) + Klima optimal (0-75)
+      const dataScore = Math.min(25, dayData.length / 2); // 50+ Messungen = volle Punkte
+      const tempScore = avgTemp >= 20 && avgTemp <= 28 ? 35 : 15;
+      const humScore = avgHum >= 50 && avgHum <= 70 ? 40 : 20;
+      score = dataScore + tempScore + humScore;
+    }
+
+    days.push({
+      date: new Date(currentDate),
+      score: Math.round(score),
+      count: dayData.length
+    });
+
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  // Gruppiere in Wochen
+  const weeks = [];
+  for (let i = 0; i < days.length; i += 7) {
+    weeks.push(days.slice(i, i + 7));
+  }
+
+  const getColor = (score) => {
+    if (score === 0) return theme.bg.hover;
+    if (score >= 90) return getSafeColor('emerald', 500);
+    if (score >= 70) return getSafeColor('emerald', 600);
+    if (score >= 50) return getSafeColor('amber', 600);
+    if (score >= 30) return getSafeColor('amber', 700);
+    return getSafeColor('red', 600);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-1 text-xs" style={{ color: theme.text.muted }}>
+        <div className="w-8">Mo</div>
+        <div className="w-8">Mi</div>
+        <div className="w-8">Fr</div>
+        <div className="w-8">So</div>
+      </div>
+      <div className="flex gap-1">
+        {weeks.map((week, weekIdx) => (
+          <div key={weekIdx} className="flex flex-col gap-1">
+            {week.map((day, dayIdx) => {
+              const isToday = day.date.toDateString() === today.toDateString();
+              return (
+                <div
+                  key={dayIdx}
+                  className="w-3 h-3 rounded-sm transition-all hover:scale-150 cursor-pointer"
+                  style={{
+                    backgroundColor: getColor(day.score),
+                    border: isToday ? `2px solid ${theme.accent.color}` : 'none'
+                  }}
+                  title={`${day.date.toLocaleDateString('de-DE')}\nScore: ${day.score}/100\n${day.count} Messungen`}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-2 text-xs pt-2" style={{ color: theme.text.muted }}>
+        <span>Weniger</span>
+        <div className="flex gap-1">
+          {[0, 30, 50, 70, 90].map(score => (
+            <div key={score} className="w-3 h-3 rounded-sm" style={{ backgroundColor: getColor(score) }} />
+          ))}
+        </div>
+        <span>Mehr</span>
+      </div>
+    </div>
+  );
+};
+
 // ==================== HAUPT KOMPONENTE ====================
 
 export default function Analytics() {
@@ -361,16 +456,8 @@ export default function Analytics() {
     }
   };
 
-  // Chart Data (downsampled for performance)
-  const chartData = useMemo(() => {
-    if (rawData.length === 0) return [];
-
-    const maxPoints = 300;
-    if (rawData.length <= maxPoints) return rawData;
-
-    const step = Math.ceil(rawData.length / maxPoints);
-    return rawData.filter((_, index) => index % step === 0);
-  }, [rawData]);
+  // Chart Data (KEIN Downsampling - zeige alle Daten)
+  const chartData = rawData;
 
   // Statistics
   const stats = useMemo(() => {
@@ -407,6 +494,42 @@ export default function Analytics() {
 
     return detected;
   }, [stats]);
+
+  // Grow-Score Berechnung (0-100)
+  const growScore = useMemo(() => {
+    if (!stats || chartData.length === 0) return null;
+
+    // 1. Klimastabilität (40 Punkte max)
+    const tempVariance = stats.temp.max - stats.temp.min;
+    const humVariance = stats.humidity.max - stats.humidity.min;
+    const vpdVariance = stats.vpd.max - stats.vpd.min;
+
+    // Perfekt: Temp±3°C, Hum±10%, VPD±0.3kPa
+    const tempStability = Math.max(0, 100 - (tempVariance / 3) * 100) * 0.4;
+    const humStability = Math.max(0, 100 - (humVariance / 10) * 100) * 0.4;
+    const vpdStability = Math.max(0, 100 - (vpdVariance / 0.3) * 100) * 0.2;
+    const stabilityScore = (tempStability + humStability + vpdStability) * 0.4;
+
+    // 2. Optimale Range (30 Punkte max)
+    const tempInRange = stats.temp.avg >= 20 && stats.temp.avg <= 28 ? 30 : 15;
+    const humInRange = stats.humidity.avg >= 50 && stats.humidity.avg <= 70 ? 30 : 15;
+    const vpdInRange = stats.vpd.avg >= 0.8 && stats.vpd.avg <= 1.2 ? 40 : 20;
+    const rangeScore = (tempInRange + humInRange + vpdInRange) / 100 * 30;
+
+    // 3. Anomalie-Abzug (30 Punkte max)
+    const anomalyScore = Math.max(0, 30 - (anomalies.length * 6));
+
+    const totalScore = Math.round(stabilityScore + rangeScore + anomalyScore);
+
+    return {
+      total: Math.max(0, Math.min(100, totalScore)),
+      breakdown: {
+        stability: Math.round(stabilityScore),
+        range: Math.round(rangeScore),
+        anomaly: Math.round(anomalyScore)
+      }
+    };
+  }, [stats, anomalies, chartData]);
 
   // Power Costs
   const kwhPerDay = (powerConfig.watts / 1000) * powerConfig.hours;
@@ -474,7 +597,7 @@ export default function Analytics() {
             <BarChart3 style={{ color: theme.accent.color }} /> Analytics & Insights
           </h2>
           <p className="text-sm mt-1" style={{ color: theme.text.muted }}>
-            {rawData.length} Messpunkte • Zeige letzte {timeRange}h
+            {chartData.length} Datenpunkte • Letzte {timeRange}h
           </p>
         </div>
 
@@ -491,7 +614,7 @@ export default function Analytics() {
           <div className="h-8 w-px" style={{ backgroundColor: theme.border.default }}></div>
 
           <div className="flex gap-2">
-            <ReportGenerator historyData={rawData} logs={logs} plants={plants} />
+            <ReportGenerator historyData={rawData} logs={logs} plants={plants} growScore={growScore} />
             <button
               onClick={loadAllData}
               className="p-2.5 rounded-xl transition-colors"
@@ -596,7 +719,29 @@ export default function Analytics() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} />
-                      <XAxis dataKey="timeStr" stroke={theme.text.muted} fontSize={12} tickMargin={10} minTickGap={30} />
+                      <XAxis
+                        dataKey="timestamp"
+                        stroke={theme.text.muted}
+                        fontSize={12}
+                        tickMargin={10}
+                        minTickGap={50}
+                        domain={['dataMin', 'dataMax']}
+                        type="number"
+                        tickFormatter={(timestamp) => {
+                          const date = new Date(timestamp);
+                          if (timeRange <= 3) {
+                            // Für kurze Zeiträume: nur Uhrzeit
+                            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          } else if (timeRange <= 24) {
+                            // Für mittlere Zeiträume: Uhrzeit mit Stunden
+                            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          } else {
+                            // Für lange Zeiträume: Datum + Uhrzeit
+                            return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' +
+                                   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          }
+                        }}
+                      />
                       <YAxis yAxisId="left" stroke={theme.text.muted} fontSize={12} domain={['auto', 'auto']} unit="°C" />
                       <YAxis yAxisId="right" orientation="right" stroke={theme.text.muted} fontSize={12} domain={[0, 100]} unit="%" />
                       {visibility.vpd && <YAxis yAxisId="vpd" orientation="right" stroke={getSafeColor('emerald', 500)} fontSize={12} domain={[0, 3]} unit=" kPa" hide />}
@@ -607,7 +752,13 @@ export default function Analytics() {
                       {visibility.temp && <Area yAxisId="left" type="monotone" dataKey="temp" name="Temperatur" stroke={getSafeColor('amber', 400)} fill="url(#gradTemp)" strokeWidth={2} />}
                       {visibility.humidity && <Area yAxisId="right" type="monotone" dataKey="humidity" name="Luftfeuchte" stroke={getSafeColor('blue', 400)} fill="url(#gradHum)" strokeWidth={2} />}
                       {visibility.vpd && <Line yAxisId="right" type="monotone" dataKey="vpd" name="VPD (kPa)" stroke={getSafeColor('emerald', 500)} strokeWidth={2} dot={false} strokeDasharray="5 5" />}
-                      <Brush dataKey="timeStr" height={30} stroke={theme.border.default} fill={theme.bg.main} />
+                      <Brush
+                        dataKey="timestamp"
+                        height={30}
+                        stroke={theme.border.default}
+                        fill={theme.bg.main}
+                        tickFormatter={(timestamp) => new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -641,7 +792,25 @@ export default function Analytics() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={theme.border.default} vertical={false} />
-                      <XAxis dataKey="timeStr" stroke={theme.text.muted} fontSize={12} minTickGap={30} />
+                      <XAxis
+                        dataKey="timestamp"
+                        stroke={theme.text.muted}
+                        fontSize={12}
+                        minTickGap={50}
+                        domain={['dataMin', 'dataMax']}
+                        type="number"
+                        tickFormatter={(timestamp) => {
+                          const date = new Date(timestamp);
+                          if (timeRange <= 3) {
+                            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          } else if (timeRange <= 24) {
+                            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          } else {
+                            return date.toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ' ' +
+                                   date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          }
+                        }}
+                      />
                       <YAxis stroke={theme.text.muted} fontSize={12} unit="%" domain={[0, 100]} />
                       <Tooltip contentStyle={{ backgroundColor: theme.bg.card, borderColor: theme.border.default, borderRadius: '12px' }} />
                       {[
@@ -765,6 +934,18 @@ export default function Analytics() {
           {/* INSIGHTS TAB */}
           {activeView === 'insights' && (
             <>
+              {/* Activity Calendar */}
+              <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
+                <div className="flex items-center gap-3 mb-6">
+                  <Calendar size={24} style={{ color: theme.accent.color }} />
+                  <div>
+                    <h3 className="font-bold" style={{ color: theme.text.primary }}>Aktivitäts-Kalender</h3>
+                    <p className="text-xs" style={{ color: theme.text.muted }}>Letzte 12 Wochen - Klima-Qualität pro Tag</p>
+                  </div>
+                </div>
+                <ActivityCalendar data={rawData} theme={theme} />
+              </div>
+
               {/* Power Cost Calculator */}
               <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
                 <div className="flex items-center gap-3 mb-6">
@@ -823,30 +1004,32 @@ export default function Analytics() {
               </div>
 
               {/* Performance Score */}
-              {stats && (
+              {stats && growScore && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-6 rounded-2xl border shadow-xl text-center" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
-                    <Award size={48} className="mx-auto mb-3" style={{ color: getSafeColor('emerald', 500) }} />
-                    <h3 className="font-bold mb-2" style={{ color: theme.text.primary }}>Performance Score</h3>
-                    <div className="text-5xl font-black mb-2" style={{ color: getSafeColor('emerald', 400) }}>92</div>
-                    <div className="text-xs" style={{ color: theme.text.muted }}>Sehr gut!</div>
+                    <Award size={48} className="mx-auto mb-3" style={{ color: growScore.total >= 80 ? getSafeColor('emerald', 500) : growScore.total >= 60 ? getSafeColor('amber', 500) : getSafeColor('red', 500) }} />
+                    <h3 className="font-bold mb-2" style={{ color: theme.text.primary }}>Grow Score</h3>
+                    <div className="text-5xl font-black mb-2" style={{ color: growScore.total >= 80 ? getSafeColor('emerald', 400) : growScore.total >= 60 ? getSafeColor('amber', 400) : getSafeColor('red', 400) }}>{growScore.total}</div>
+                    <div className="text-xs" style={{ color: theme.text.muted }}>
+                      {growScore.total >= 90 ? 'Exzellent!' : growScore.total >= 80 ? 'Sehr gut!' : growScore.total >= 70 ? 'Gut' : growScore.total >= 60 ? 'OK' : 'Verbesserungswürdig'}
+                    </div>
                   </div>
 
                   <div className="p-6 rounded-2xl border shadow-xl" style={{ backgroundColor: theme.bg.card, borderColor: theme.border.default }}>
                     <Gauge size={24} className="mb-3" style={{ color: getSafeColor('blue', 500) }} />
-                    <h3 className="font-bold mb-3" style={{ color: theme.text.primary }}>Klima Stabilität</h3>
+                    <h3 className="font-bold mb-3" style={{ color: theme.text.primary }}>Score Breakdown</h3>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span style={{ color: theme.text.muted }}>Temperatur</span>
-                        <span className="font-bold" style={{ color: getSafeColor('emerald', 400) }}>95%</span>
+                        <span style={{ color: theme.text.muted }}>Stabilität (40%)</span>
+                        <span className="font-bold" style={{ color: growScore.breakdown.stability >= 30 ? getSafeColor('emerald', 400) : getSafeColor('amber', 400) }}>{growScore.breakdown.stability}/40</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span style={{ color: theme.text.muted }}>Luftfeuchte</span>
-                        <span className="font-bold" style={{ color: getSafeColor('amber', 400) }}>87%</span>
+                        <span style={{ color: theme.text.muted }}>Optimale Range (30%)</span>
+                        <span className="font-bold" style={{ color: growScore.breakdown.range >= 24 ? getSafeColor('emerald', 400) : getSafeColor('amber', 400) }}>{growScore.breakdown.range}/30</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span style={{ color: theme.text.muted }}>VPD</span>
-                        <span className="font-bold" style={{ color: getSafeColor('emerald', 400) }}>94%</span>
+                        <span style={{ color: theme.text.muted }}>Anomalien (30%)</span>
+                        <span className="font-bold" style={{ color: growScore.breakdown.anomaly >= 24 ? getSafeColor('emerald', 400) : getSafeColor('amber', 400) }}>{growScore.breakdown.anomaly}/30</span>
                       </div>
                     </div>
                   </div>

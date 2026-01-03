@@ -300,6 +300,53 @@ export const themes = {
         border: colors.purple[700]
       }
     }
+  },
+
+  light: {
+    id: 'light',
+    name: 'Light Mode',
+
+    bg: {
+      main: colors.slate[50],
+      card: '#ffffff',
+      hover: colors.slate[100],
+      input: '#ffffff',
+      muted: colors.slate[100]
+    },
+
+    border: {
+      default: colors.slate[200],
+      light: colors.slate[100],
+      dark: colors.slate[300]
+    },
+
+    text: {
+      primary: colors.slate[900],
+      secondary: colors.slate[600],
+      muted: colors.slate[500],
+      inverse: colors.slate[50]
+    },
+
+    accent: {
+      name: 'emerald',
+      color: colors.emerald[600],
+      light: colors.emerald[500],
+      dark: colors.emerald[700],
+      rgb: '5, 150, 105',
+      gradient: {
+        from: colors.emerald[600],
+        to: colors.emerald[700]
+      }
+    },
+
+    components: {
+      welcomeGradient: `linear-gradient(to bottom right, ${colors.slate[100]}, ${colors.slate[200]})`,
+      chartGrid: colors.slate[300],
+      tooltip: {
+        bg: '#ffffff',
+        border: colors.slate[200]
+      }
+    }
   }
 };
 

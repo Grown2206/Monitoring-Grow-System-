@@ -3,6 +3,7 @@ import StatCard from './Dashboard/StatCard';
 import LiveChart from './Dashboard/LiveChart';
 import CameraFeed from './Dashboard/CameraFeed';
 import WeatherWidget from './Dashboard/WeatherWidget';
+import HarvestCountdown from './HarvestCountdown';
 import { useSocket } from '../context/SocketContext';
 import { api } from '../services/api';
 import { useTheme, themes, colors } from '../theme';
@@ -27,6 +28,7 @@ export default function Dashboard({ changeTab }) {
   const [activeAlerts, setActiveAlerts] = useState([]);
   const [averages, setAverages] = useState({ temp: null, humidity: null, lux: null, vpd: null });
   const [isThemeMenuOpen, setIsThemeMenuOpen] = useState(false);
+  const [plants, setPlants] = useState([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -34,10 +36,15 @@ export default function Dashboard({ changeTab }) {
 
   const loadDashboardData = async () => {
     try {
-      const [events, history] = await Promise.all([
+      const [events, history, plantsData] = await Promise.all([
         api.getEvents(),
-        api.getHistory()
+        api.getHistory(),
+        api.getPlants()
       ]);
+
+      if (plantsData) {
+        setPlants(plantsData);
+      }
 
       const futureEvents = events
         .filter(e => new Date(e.date) >= new Date())
@@ -331,6 +338,11 @@ export default function Dashboard({ changeTab }) {
           theme={currentTheme}
         />
       </div>
+
+      {/* Harvest Countdown - Show for first active plant */}
+      {plants && plants.length > 0 && plants[0].growStartDate && (
+        <HarvestCountdown plant={plants[0]} />
+      )}
 
       {/* Middle Section: Chart & Weather - Improved responsive layout */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">

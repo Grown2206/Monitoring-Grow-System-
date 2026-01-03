@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+// Node.js 18+ hat natives fetch() - kein Import nötig
 
 // OpenWeather API Config
 const API_KEY = process.env.OPENWEATHER_API_KEY || 'demo-key'; // Benutzer muss eigenen Key in .env setzen
